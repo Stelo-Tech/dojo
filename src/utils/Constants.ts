@@ -26,8 +26,11 @@ export const TERRAIN_COLOR = 0x8b4513;
 export const DIG_SPEED = 20;
 export const BUILD_INTERVAL = 400;
 export const BUILD_MAX_STEPS = 10;
-export const BUILD_STEP_WIDTH = 16;
-export const BUILD_STEP_HEIGHT = 3;
+export const BUILD_STEP_WIDTH = 18;
+export const BUILD_STEP_HEIGHT = 4;
+
+/** Maximum step height a walker can auto-climb (pixels) */
+export const STEP_CLIMB_MAX = 6;
 export const CLIMB_SPEED = 20;
 export const CLIMB_MAX_HEIGHT = 60;
 
@@ -107,13 +110,13 @@ interface LevelRect {
 /** Spawn platform */
 export const PLATFORM_LEFT: LevelRect = { x: 50, y: 390, w: 200, h: 15 };
 
-/** Danger ledge — wider cliff for more urgency */
+/** Danger ledge */
 export const LEFT_CLIFF_GAP: LevelRect = { x: 0, y: TERRAIN_Y, w: 120, h: 90 };
 
-/** Wide gap requiring Builder (80px = exactly 10 steps of 8px advance) */
+/** Wide gap requiring Builder (80px = exact builder range) */
 export const FOSSE_GAP: LevelRect = { x: 300, y: TERRAIN_Y, w: 80, h: 90 };
 
-/** Vertical wall — shorter (70px), climbable within CLIMB_MAX_HEIGHT */
+/** Vertical wall — needs Climber */
 export const WALL_VERT: LevelRect = { x: 550, y: 380, w: 20, h: 70 };
 
 /** Platform behind wall leading to exit */
@@ -125,7 +128,7 @@ export const STAIR_2: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
 export const STAIR_3: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
 export const PRE_EXIT_GAP: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
 
-/** Blocker collision detection radius in pixels */
+/** Blocker collision detection */
 export const BLOCKER_DETECTION_RADIUS = 14;
 export const BLOCKER_VERTICAL_RANGE = 16;
 

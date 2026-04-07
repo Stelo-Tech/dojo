@@ -7,6 +7,7 @@ import {
   GAME_HEIGHT,
   BLOCKER_DETECTION_RADIUS,
   BLOCKER_VERTICAL_RANGE,
+  STEP_CLIMB_MAX,
 } from '@/utils/Constants';
 
 export class PhysicsSystem {
@@ -71,16 +72,40 @@ export class PhysicsSystem {
         // Always snap to surface
         lemming.y = this.snapToSurface(lemming.x, lemming.y);
 
-        // Blocker collision BEFORE wall detection
+        // Blocker collision BEFORE wall/step detection
         if (blockers.length > 0) {
           this.handleBlockerCollision(lemming, blockers);
         }
 
-        // Wall detection
+        // Step-climbing: detect low obstacles (1-STEP_CLIMB_MAX px) ahead
+        const aheadX = lemming.x + lemming.direction * 6;
+        const hasObstacleAtFeet = this.terrain.isGround(aheadX, lemming.y - 1);
+        const hasObstacleAtBody = this.terrain.isGround(aheadX, lemming.y - (STEP_CLIMB_MAX + 4));
+
+        if (hasObstacleAtFeet && !hasObstacleAtBody) {
+          // Low obstacle — find the top of the step
+          let stepTopY = lemming.y - 1;
+          for (let probe = 0; probe < STEP_CLIMB_MAX + 2; probe++) {
+            if (this.terrain.isGround(aheadX, stepTopY - 1)) {
+              stepTopY--;
+            } else {
+              break;
+            }
+          }
+          // Climb if within max step height
+          const stepHeight = lemming.y - stepTopY;
+          if (stepHeight > 0 && stepHeight <= STEP_CLIMB_MAX) {
+            lemming.y = stepTopY;
+            continue; // skip wall detection — we climbed the step
+          }
+        }
+
+        // Wall detection — only for tall walls (solid at all three check heights)
         const wallCheckX = lemming.x + lemming.direction * 6;
-        const wallAhead =
-          this.terrain.isWall(wallCheckX, lemming.y - 4) &&
-          this.terrain.isWall(wallCheckX, lemming.y - 8);
+        const wallAtLow = this.terrain.isWall(wallCheckX, lemming.y - 4);
+        const wallAtMid = this.terrain.isWall(wallCheckX, lemming.y - 8);
+        const wallAtHigh = this.terrain.isWall(wallCheckX, lemming.y - 12);
+        const wallAhead = wallAtLow && wallAtMid && wallAtHigh;
 
         if (wallAhead) {
           if (lemming.hasSkill('climber')) {
@@ -106,17 +131,14 @@ export class PhysicsSystem {
         continue;
       }
 
-      // Approaching from the right, moving left
       if (dx > 0 && walker.direction === -1) {
         walker.direction = 1;
         break;
       }
-      // Approaching from the left, moving right
       if (dx < 0 && walker.direction === 1) {
         walker.direction = -1;
         break;
       }
-      // Overlapping — push away
       if (Math.abs(dx) < 3) {
         walker.direction = dx >= 0 ? 1 : -1;
         walker.x = blocker.x + walker.direction * 3;
@@ -129,7 +151,10 @@ export class PhysicsSystem {
     return (
       this.terrain.isGround(x, y) ||
       this.terrain.isGround(x - 4, y) ||
-      this.terrain.isGround(x + 4, y)
+      this.terrain.isGround(x + 4, y) ||
+      this.terrain.isGround(x, y - 1) ||
+      this.terrain.isGround(x - 4, y - 1) ||
+      this.terrain.isGround(x + 4, y - 1)
     );
   }
 
