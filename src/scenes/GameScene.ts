@@ -14,13 +14,10 @@ import {
   BG_COLOR_BOTTOM,
   BG_STAR_COUNT,
   PLATFORM_LEFT,
+  LEFT_CLIFF_GAP,
   FOSSE_GAP,
-  STAIR_1,
-  STAIR_2,
-  STAIR_3,
   WALL_VERT,
   EXIT_PLATFORM,
-  PRE_EXIT_GAP,
   SPAWN_PORTAL_WIDTH,
   SPAWN_PORTAL_HEIGHT,
   SPAWN_PORTAL_COLOR,
@@ -203,13 +200,10 @@ export class GameScene extends Phaser.Scene {
   private buildLevel(): void {
     if (!this.terrainSystem) return;
     this.terrainSystem.fillRect(PLATFORM_LEFT.x, PLATFORM_LEFT.y, PLATFORM_LEFT.w, PLATFORM_LEFT.h);
+    this.terrainSystem.eraseRect(LEFT_CLIFF_GAP.x, LEFT_CLIFF_GAP.y, LEFT_CLIFF_GAP.w, LEFT_CLIFF_GAP.h);
     this.terrainSystem.eraseRect(FOSSE_GAP.x, FOSSE_GAP.y, FOSSE_GAP.w, FOSSE_GAP.h);
-    this.terrainSystem.fillRect(STAIR_1.x, STAIR_1.y, STAIR_1.w, STAIR_1.h);
-    this.terrainSystem.fillRect(STAIR_2.x, STAIR_2.y, STAIR_2.w, STAIR_2.h);
-    this.terrainSystem.fillRect(STAIR_3.x, STAIR_3.y, STAIR_3.w, STAIR_3.h);
     this.terrainSystem.fillRect(WALL_VERT.x, WALL_VERT.y, WALL_VERT.w, WALL_VERT.h);
     this.terrainSystem.fillRect(EXIT_PLATFORM.x, EXIT_PLATFORM.y, EXIT_PLATFORM.w, EXIT_PLATFORM.h);
-    this.terrainSystem.eraseRect(PRE_EXIT_GAP.x, PRE_EXIT_GAP.y, PRE_EXIT_GAP.w, PRE_EXIT_GAP.h);
   }
 
   private createSpawnPortal(): void {
