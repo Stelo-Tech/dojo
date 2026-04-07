@@ -1,23 +1,31 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH } from '@/utils/Constants';
+import {
+  EXIT_X,
+  EXIT_Y,
+  EXIT_WIDTH,
+  EXIT_HEIGHT,
+  TERRAIN_Y,
+} from '@/utils/Constants';
+import { gameEventBus } from '@/utils/EventBus';
 import { LemmingPool } from '@/entities/LemmingPool';
+import { Lemming } from '@/entities/Lemming';
 import { SpawnSystem } from '@/systems/SpawnSystem';
 import { PhysicsSystem } from '@/systems/PhysicsSystem';
+import { TerrainSystem } from '@/systems/TerrainSystem';
+import { HUD } from '@/ui/HUD';
+import { TouchControls } from '@/ui/TouchControls';
 
-/** Y coordinate of the simple ground line used in Phase 2. */
-const GROUND_Y = 450;
-
-/**
- * GameScene — main gameplay scene.
- *
- * All game logic is delegated to systems; this scene only wires them
- * together and forwards the update loop.
- */
 export class GameScene extends Phaser.Scene {
   private lemmingPool: LemmingPool | null = null;
   private spawnSystem: SpawnSystem | null = null;
   private physicsSystem: PhysicsSystem | null = null;
-  private statusText: Phaser.GameObjects.Text | null = null;
+  private terrainSystem: TerrainSystem | null = null;
+  private hud: HUD | null = null;
+  private touchControls: TouchControls | null = null;
+  private exitZone: Phaser.GameObjects.Rectangle | null = null;
+  private savedCount = 0;
+  private deadCount = 0;
+  private diedHandler: ((data: { id: number; cause: string }) => void) | null = null;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -25,37 +33,68 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.setBackgroundColor('#1a1a2e');
+    this.savedCount = 0;
+    this.deadCount = 0;
 
-    // -- Visual: ground line (grey rectangle) --
-    this.add.rectangle(GAME_WIDTH / 2, GROUND_Y + 2, GAME_WIDTH, 4, 0x888888);
+    // -- Terrain system --
+    this.terrainSystem = new TerrainSystem(this);
+    this.terrainSystem.eraseRect(350, TERRAIN_Y, 80, 40);
+    this.terrainSystem.eraseRect(700, TERRAIN_Y, 60, 30);
 
-    // -- Systems --
-    this.lemmingPool = new LemmingPool(this, 20);
-    this.spawnSystem = new SpawnSystem(this.lemmingPool, {
-      x: 100,
-      y: 100,
-      maxLemmings: 20, // small count for Phase 2 demo
-      spawnInterval: 1000,
-    });
-    this.physicsSystem = new PhysicsSystem(this.lemmingPool, GROUND_Y);
-
-    // -- HUD counter --
-    this.statusText = this.add
-      .text(8, 8, '', {
-        fontSize: '16px',
-        color: '#ffffff',
+    // -- Exit zone --
+    this.exitZone = this.add
+      .rectangle(EXIT_X + EXIT_WIDTH / 2, EXIT_Y + EXIT_HEIGHT / 2, EXIT_WIDTH, EXIT_HEIGHT, 0x00ff00, 0.5)
+      .setDepth(50);
+    this.add
+      .text(EXIT_X + EXIT_WIDTH / 2, EXIT_Y - 8, 'EXIT', {
+        fontSize: '10px',
+        color: '#00ff00',
         fontFamily: 'Arial',
       })
-      .setDepth(100);
+      .setOrigin(0.5)
+      .setDepth(50);
+
+    // -- Lemming pool --
+    this.lemmingPool = new LemmingPool(this, 20);
+
+    // -- Systems --
+    this.spawnSystem = new SpawnSystem(this.lemmingPool, {
+      x: 100,
+      y: TERRAIN_Y - 60,
+      maxLemmings: 20,
+      spawnInterval: 1000,
+    });
+    this.physicsSystem = new PhysicsSystem(this.lemmingPool, this.terrainSystem);
+
+    // -- HUD + Touch --
+    this.hud = new HUD(this);
+    this.touchControls = new TouchControls(this, this.lemmingPool, this.hud);
+
+    // -- EventBus listeners --
+    this.diedHandler = (_data: { id: number; cause: string }) => {
+      this.deadCount++;
+    };
+    gameEventBus.on('lemming:died', this.diedHandler);
   }
 
   update(_time: number, delta: number): void {
-    // Phaser passes delta in ms; systems expect seconds
     const dt = delta / 1000;
 
     if (this.spawnSystem) {
       this.spawnSystem.update(dt);
     }
+
+    // Inject terrain access into newly spawned lemmings
+    if (this.lemmingPool && this.terrainSystem) {
+      const activeLemmings = this.lemmingPool.getActive();
+      for (let i = 0; i < activeLemmings.length; i++) {
+        const lem = activeLemmings[i] as Lemming | undefined;
+        if (lem && lem.getTerrainAccess() === null) {
+          lem.setTerrainAccess(this.terrainSystem);
+        }
+      }
+    }
+
     if (this.lemmingPool) {
       this.lemmingPool.updateAll(dt);
     }
@@ -63,12 +102,39 @@ export class GameScene extends Phaser.Scene {
       this.physicsSystem.update(dt);
     }
 
-    // Update HUD
-    if (this.statusText && this.lemmingPool && this.spawnSystem) {
-      const alive = this.lemmingPool.activeCount;
-      const total = this.spawnSystem.getSpawnedCount();
-      this.statusText.setText(`Lemmings: ${alive} alive / ${total} total`);
+    // -- Exit zone check --
+    if (this.lemmingPool) {
+      const active = this.lemmingPool.getActive();
+      for (let i = active.length - 1; i >= 0; i--) {
+        const lemming = active[i];
+        if (!lemming || !lemming.alive) continue;
+
+        if (this.isAtExit(lemming.x, lemming.y)) {
+          lemming.changeState('saved');
+          this.savedCount++;
+          gameEventBus.emit('lemming:saved', { id: lemming.id });
+        }
+      }
     }
+
+    // -- Update HUD counters --
+    if (this.lemmingPool) {
+      const alive = this.lemmingPool.activeCount;
+      gameEventBus.emit('hud:update', {
+        alive,
+        saved: this.savedCount,
+        dead: this.deadCount,
+      });
+    }
+  }
+
+  private isAtExit(x: number, y: number): boolean {
+    return (
+      x >= EXIT_X &&
+      x <= EXIT_X + EXIT_WIDTH &&
+      y >= EXIT_Y &&
+      y <= EXIT_Y + EXIT_HEIGHT
+    );
   }
 
   shutdown(): void {
@@ -80,6 +146,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private cleanUp(): void {
+    if (this.diedHandler) {
+      gameEventBus.off('lemming:died', this.diedHandler);
+      this.diedHandler = null;
+    }
+    if (this.touchControls) {
+      this.touchControls.destroy();
+      this.touchControls = null;
+    }
+    if (this.hud) {
+      this.hud.destroy();
+      this.hud = null;
+    }
     if (this.spawnSystem) {
       this.spawnSystem.destroy();
       this.spawnSystem = null;
@@ -88,10 +166,17 @@ export class GameScene extends Phaser.Scene {
       this.physicsSystem.destroy();
       this.physicsSystem = null;
     }
+    if (this.terrainSystem) {
+      this.terrainSystem.destroy();
+      this.terrainSystem = null;
+    }
     if (this.lemmingPool) {
       this.lemmingPool.destroy();
       this.lemmingPool = null;
     }
-    this.statusText = null;
+    if (this.exitZone) {
+      this.exitZone.destroy();
+      this.exitZone = null;
+    }
   }
 }
