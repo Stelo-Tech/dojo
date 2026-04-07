@@ -24,10 +24,10 @@ export const TERRAIN_COLOR = 0x8b4513;
 
 /** Skills */
 export const DIG_SPEED = 20;
-export const BUILD_INTERVAL = 300;
-export const BUILD_MAX_STEPS = 12;
-export const BUILD_STEP_WIDTH = 12;
-export const BUILD_STEP_HEIGHT = 2;
+export const BUILD_INTERVAL = 400;
+export const BUILD_MAX_STEPS = 10;
+export const BUILD_STEP_WIDTH = 16;
+export const BUILD_STEP_HEIGHT = 3;
 export const CLIMB_SPEED = 20;
 export const CLIMB_MAX_HEIGHT = 60;
 
@@ -44,7 +44,7 @@ export type SkillType = 'digger' | 'builder' | 'blocker' | 'climber';
 
 /** Exit zone */
 export const EXIT_X = 850;
-export const EXIT_Y = 438;
+export const EXIT_Y = 420;
 export const EXIT_WIDTH = 30;
 export const EXIT_HEIGHT = 30;
 
@@ -104,14 +104,31 @@ interface LevelRect {
   readonly h: number;
 }
 
-export const PLATFORM_LEFT: LevelRect = { x: 50, y: 380, w: 200, h: 20 };
-export const FOSSE_GAP: LevelRect = { x: 350, y: TERRAIN_Y, w: 80, h: 90 };
-export const STAIR_1: LevelRect = { x: 550, y: 400, w: 60, h: 10 };
-export const STAIR_2: LevelRect = { x: 620, y: 420, w: 60, h: 10 };
-export const STAIR_3: LevelRect = { x: 690, y: 440, w: 60, h: 10 };
-export const WALL_VERT: LevelRect = { x: 600, y: 350, w: 20, h: 100 };
-export const EXIT_PLATFORM: LevelRect = { x: 820, y: 440, w: 80, h: 10 };
-export const PRE_EXIT_GAP: LevelRect = { x: 780, y: TERRAIN_Y, w: 40, h: 90 };
+/** Spawn platform */
+export const PLATFORM_LEFT: LevelRect = { x: 50, y: 390, w: 200, h: 15 };
+
+/** Danger ledge on the left */
+export const LEFT_CLIFF_GAP: LevelRect = { x: 0, y: TERRAIN_Y, w: 50, h: 90 };
+
+/** Wide gap requiring Builder to cross */
+export const FOSSE_GAP: LevelRect = { x: 300, y: TERRAIN_Y, w: 100, h: 90 };
+
+/** Vertical wall blocking progress */
+export const WALL_VERT: LevelRect = { x: 550, y: 360, w: 20, h: 90 };
+
+/** Platform behind wall leading to exit */
+export const EXIT_PLATFORM: LevelRect = { x: 570, y: TERRAIN_Y, w: 350, h: 20 };
+
+/** Removed — no longer used */
+export const STAIR_1: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
+export const STAIR_2: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
+export const STAIR_3: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
+export const PRE_EXIT_GAP: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
+
+/** Blocker collision detection radius in pixels */
+export const BLOCKER_DETECTION_RADIUS = 14;
+/** Blocker vertical detection range in pixels */
+export const BLOCKER_VERTICAL_RANGE = 16;
 
 /** Spawn portal visual */
 export const SPAWN_PORTAL_WIDTH = 30;
