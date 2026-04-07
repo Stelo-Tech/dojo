@@ -9,11 +9,9 @@ import {
   BUILD_STEP_HEIGHT,
   CLIMB_SPEED,
   CLIMB_MAX_HEIGHT,
+  STATE_COLORS,
 } from '@/utils/Constants';
 
-/**
- * Generic state interface for a finite state machine.
- */
 export interface State<T> {
   readonly name: string;
   enter(entity: T): void;
@@ -21,10 +19,6 @@ export interface State<T> {
   exit(entity: T): void;
 }
 
-/**
- * Terrain operations interface -- states that modify terrain receive this.
- * Avoids importing TerrainSystem directly into state files.
- */
 export interface TerrainAccess {
   isGround(x: number, y: number): boolean;
   isWall(x: number, y: number): boolean;
@@ -33,10 +27,6 @@ export interface TerrainAccess {
   buildStep(x: number, y: number, width: number, height: number): void;
 }
 
-/**
- * Forward declaration of the Lemming interface consumed by states.
- * Avoids circular dependency with Lemming.ts.
- */
 export interface LemmingEntity {
   x: number;
   y: number;
@@ -52,10 +42,6 @@ export interface LemmingEntity {
   hasSkill(skill: string): boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Concrete states
-// ---------------------------------------------------------------------------
-
 export class WalkerState implements State<LemmingEntity> {
   readonly name = 'walker';
 
@@ -68,17 +54,13 @@ export class WalkerState implements State<LemmingEntity> {
     entity.x += LEMMING_SPEED * entity.direction * dt;
   }
 
-  exit(_entity: LemmingEntity): void {
-    // no-op
-  }
+  exit(_entity: LemmingEntity): void {}
 }
 
 export class FallerState implements State<LemmingEntity> {
   readonly name = 'faller';
 
-  enter(_entity: LemmingEntity): void {
-    // fallDistance is accumulated, not reset here
-  }
+  enter(_entity: LemmingEntity): void {}
 
   update(entity: LemmingEntity, dt: number): void {
     const delta = GRAVITY * dt;
@@ -100,24 +82,15 @@ export class DeadState implements State<LemmingEntity> {
     entity.alive = false;
   }
 
-  update(_entity: LemmingEntity, _dt: number): void {
-    // no-op
-  }
-
-  exit(_entity: LemmingEntity): void {
-    // no-op
-  }
+  update(_entity: LemmingEntity, _dt: number): void {}
+  exit(_entity: LemmingEntity): void {}
 }
-
-// ---------------------------------------------------------------------------
-// Phase 3 states
-// ---------------------------------------------------------------------------
 
 export class DiggerState implements State<LemmingEntity> {
   readonly name = 'digger';
 
   enter(entity: LemmingEntity): void {
-    entity.setColor(0x8b4513); // brown
+    entity.setColor(STATE_COLORS['digger'] ?? 0xcd853f);
   }
 
   update(entity: LemmingEntity, dt: number): void {
@@ -129,7 +102,6 @@ export class DiggerState implements State<LemmingEntity> {
 
     const digAmount = DIG_SPEED * dt;
     const digWidth = 10;
-
     terrain.digColumn(entity.x - digWidth / 2, entity.y, digWidth, digAmount);
     entity.y += digAmount;
 
@@ -143,21 +115,18 @@ export class DiggerState implements State<LemmingEntity> {
     }
   }
 
-  exit(_entity: LemmingEntity): void {
-    // no-op
-  }
+  exit(_entity: LemmingEntity): void {}
 }
 
 export class BuilderState implements State<LemmingEntity> {
   readonly name = 'builder';
-
   private stepsPlaced = 0;
   private timeSinceLastStep = 0;
 
   enter(entity: LemmingEntity): void {
-    entity.setColor(0x00ffff); // cyan
+    entity.setColor(STATE_COLORS['builder'] ?? 0x00ffff);
     this.stepsPlaced = 0;
-    this.timeSinceLastStep = BUILD_INTERVAL; // place first step immediately
+    this.timeSinceLastStep = BUILD_INTERVAL;
   }
 
   update(entity: LemmingEntity, dt: number): void {
@@ -171,20 +140,12 @@ export class BuilderState implements State<LemmingEntity> {
 
     if (this.timeSinceLastStep >= BUILD_INTERVAL) {
       this.timeSinceLastStep -= BUILD_INTERVAL;
-
-      const stepX =
-        entity.direction === 1
-          ? entity.x
-          : entity.x - BUILD_STEP_WIDTH;
+      const stepX = entity.direction === 1 ? entity.x : entity.x - BUILD_STEP_WIDTH;
       const stepY = entity.y - BUILD_STEP_HEIGHT;
-
       terrain.buildStep(stepX, stepY, BUILD_STEP_WIDTH, BUILD_STEP_HEIGHT);
-
       entity.y -= BUILD_STEP_HEIGHT;
       entity.x += entity.direction * (BUILD_STEP_WIDTH / 2);
-
       this.stepsPlaced++;
-
       if (this.stepsPlaced >= BUILD_MAX_STEPS) {
         entity.changeState('walker');
       }
@@ -201,13 +162,11 @@ export class BlockerState implements State<LemmingEntity> {
   readonly name = 'blocker';
 
   enter(entity: LemmingEntity): void {
-    entity.setColor(0xff0000); // red
+    entity.setColor(STATE_COLORS['blocker'] ?? 0xff4444);
     entity.isBlocker = true;
   }
 
-  update(_entity: LemmingEntity, _dt: number): void {
-    // Blocker stands still
-  }
+  update(_entity: LemmingEntity, _dt: number): void {}
 
   exit(entity: LemmingEntity): void {
     entity.isBlocker = false;
@@ -216,11 +175,10 @@ export class BlockerState implements State<LemmingEntity> {
 
 export class ClimberState implements State<LemmingEntity> {
   readonly name = 'climber';
-
   private climbedDistance = 0;
 
   enter(entity: LemmingEntity): void {
-    entity.setColor(0xff00ff); // magenta
+    entity.setColor(STATE_COLORS['climber'] ?? 0xff00ff);
     this.climbedDistance = 0;
   }
 
@@ -264,11 +222,6 @@ export class SavedState implements State<LemmingEntity> {
     entity.alive = false;
   }
 
-  update(_entity: LemmingEntity, _dt: number): void {
-    // no-op
-  }
-
-  exit(_entity: LemmingEntity): void {
-    // no-op
-  }
+  update(_entity: LemmingEntity, _dt: number): void {}
+  exit(_entity: LemmingEntity): void {}
 }
