@@ -199,11 +199,43 @@ export class GameScene extends Phaser.Scene {
 
   private buildLevel(): void {
     if (!this.terrainSystem) return;
-    this.terrainSystem.fillRect(PLATFORM_LEFT.x, PLATFORM_LEFT.y, PLATFORM_LEFT.w, PLATFORM_LEFT.h);
-    this.terrainSystem.eraseRect(LEFT_CLIFF_GAP.x, LEFT_CLIFF_GAP.y, LEFT_CLIFF_GAP.w, LEFT_CLIFF_GAP.h);
-    this.terrainSystem.eraseRect(FOSSE_GAP.x, FOSSE_GAP.y, FOSSE_GAP.w, FOSSE_GAP.h);
-    this.terrainSystem.fillRect(WALL_VERT.x, WALL_VERT.y, WALL_VERT.w, WALL_VERT.h);
-    this.terrainSystem.fillRect(EXIT_PLATFORM.x, EXIT_PLATFORM.y, EXIT_PLATFORM.w, EXIT_PLATFORM.h);
+
+    // 1. Spawn platform
+    this.terrainSystem.fillRect(
+      PLATFORM_LEFT.x, PLATFORM_LEFT.y, PLATFORM_LEFT.w, PLATFORM_LEFT.h,
+    );
+
+    // 2. Slope from spawn platform down to main terrain
+    const slopeStartX = PLATFORM_LEFT.x + PLATFORM_LEFT.w;
+    const slopeTopY = PLATFORM_LEFT.y + PLATFORM_LEFT.h;
+    const slopeSteps = 10;
+    const stepW = 5;
+    const stepH = Math.ceil((TERRAIN_Y - slopeTopY) / slopeSteps);
+    for (let s = 0; s < slopeSteps; s++) {
+      const sx = slopeStartX + s * stepW;
+      const sy = slopeTopY + s * stepH;
+      this.terrainSystem.fillRect(sx, sy, stepW, TERRAIN_Y - sy + 10);
+    }
+
+    // 3. Erase left cliff
+    this.terrainSystem.eraseRect(
+      LEFT_CLIFF_GAP.x, LEFT_CLIFF_GAP.y, LEFT_CLIFF_GAP.w, LEFT_CLIFF_GAP.h,
+    );
+
+    // 4. Wide fossé gap
+    this.terrainSystem.eraseRect(
+      FOSSE_GAP.x, FOSSE_GAP.y, FOSSE_GAP.w, FOSSE_GAP.h,
+    );
+
+    // 5. Vertical wall
+    this.terrainSystem.fillRect(
+      WALL_VERT.x, WALL_VERT.y, WALL_VERT.w, WALL_VERT.h,
+    );
+
+    // 6. Exit platform behind wall
+    this.terrainSystem.fillRect(
+      EXIT_PLATFORM.x, EXIT_PLATFORM.y, EXIT_PLATFORM.w, EXIT_PLATFORM.h,
+    );
   }
 
   private createSpawnPortal(): void {

@@ -1,4 +1,5 @@
 import { LemmingPool } from '@/entities/LemmingPool';
+import { Lemming } from '@/entities/Lemming';
 import { TerrainSystem } from '@/systems/TerrainSystem';
 import { gameEventBus } from '@/utils/EventBus';
 import {
@@ -20,6 +21,15 @@ export class PhysicsSystem {
   update(_dt: number): void {
     const active = this.pool.getActive();
 
+    // Phase 1: collect all active blockers
+    const blockers: Lemming[] = [];
+    for (let i = active.length - 1; i >= 0; i--) {
+      const l = active[i];
+      if (l && l.alive && l.isBlocker) {
+        blockers.push(l);
+      }
+    }
+
     for (let i = active.length - 1; i >= 0; i--) {
       const lemming = active[i];
       if (!lemming || !lemming.alive) continue;
@@ -33,24 +43,24 @@ export class PhysicsSystem {
         continue;
       }
 
-      // Skip physics for states that manage their own movement
+      // Skip physics for self-managed states
       if (state === 'blocker' || state === 'digger' || state === 'builder' || state === 'climber') {
         continue;
       }
 
-      // --- Ground detection (multi-point) ---
       const onGround = this.checkGround(lemming.x, lemming.y);
 
-      // --- Faller landing ---
-      if (onGround && state === 'faller') {
-        lemming.y = this.snapToSurface(lemming.x, lemming.y);
-        lemming.changeState('walker');
+      // Faller landing
+      if (state === 'faller') {
+        if (onGround) {
+          lemming.y = this.snapToSurface(lemming.x, lemming.y);
+          lemming.changeState('walker');
+        }
         continue;
       }
 
-      // --- Walker physics ---
+      // Walker physics
       if (state === 'walker') {
-        // Check ground below (multi-point, 1px below feet)
         const groundBelow = this.checkGround(lemming.x, lemming.y + 1);
 
         if (!groundBelow) {
@@ -58,13 +68,15 @@ export class PhysicsSystem {
           continue;
         }
 
-        // Snap to surface to avoid floating
-        const snappedY = this.snapToSurface(lemming.x, lemming.y);
-        if (snappedY < lemming.y) {
-          lemming.y = snappedY;
+        // Always snap to surface
+        lemming.y = this.snapToSurface(lemming.x, lemming.y);
+
+        // Blocker collision BEFORE wall detection
+        if (blockers.length > 0) {
+          this.handleBlockerCollision(lemming, blockers);
         }
 
-        // Wall detection — check terrain ahead at multiple heights
+        // Wall detection
         const wallCheckX = lemming.x + lemming.direction * 6;
         const wallAhead =
           this.terrain.isWall(wallCheckX, lemming.y - 4) &&
@@ -78,26 +90,37 @@ export class PhysicsSystem {
           lemming.direction = lemming.direction === 1 ? -1 : 1;
           continue;
         }
+      }
+    }
+  }
 
-        // --- Blocker collision (CRITICAL) ---
-        for (let j = active.length - 1; j >= 0; j--) {
-          const other = active[j];
-          if (!other || !other.alive || !other.isBlocker || other.id === lemming.id) continue;
+  private handleBlockerCollision(walker: Lemming, blockerList: readonly Lemming[]): void {
+    for (let j = 0; j < blockerList.length; j++) {
+      const blocker = blockerList[j];
+      if (!blocker || blocker.id === walker.id) continue;
 
-          const dx = lemming.x - other.x;
-          const dy = Math.abs(lemming.y - other.y);
+      const dx = walker.x - blocker.x;
+      const dy = Math.abs(walker.y - blocker.y);
 
-          if (Math.abs(dx) < BLOCKER_DETECTION_RADIUS && dy < BLOCKER_VERTICAL_RANGE) {
-            if (dx > 0 && lemming.direction === -1) {
-              lemming.direction = 1;
-            } else if (dx < 0 && lemming.direction === 1) {
-              lemming.direction = -1;
-            } else if (Math.abs(dx) < 2) {
-              lemming.direction = lemming.direction === 1 ? -1 : 1;
-            }
-            break;
-          }
-        }
+      if (Math.abs(dx) >= BLOCKER_DETECTION_RADIUS || dy >= BLOCKER_VERTICAL_RANGE) {
+        continue;
+      }
+
+      // Approaching from the right, moving left
+      if (dx > 0 && walker.direction === -1) {
+        walker.direction = 1;
+        break;
+      }
+      // Approaching from the left, moving right
+      if (dx < 0 && walker.direction === 1) {
+        walker.direction = -1;
+        break;
+      }
+      // Overlapping — push away
+      if (Math.abs(dx) < 3) {
+        walker.direction = dx >= 0 ? 1 : -1;
+        walker.x = blocker.x + walker.direction * 3;
+        break;
       }
     }
   }
@@ -122,7 +145,5 @@ export class PhysicsSystem {
     return surfaceY;
   }
 
-  destroy(): void {
-    // Stateless
-  }
+  destroy(): void {}
 }
