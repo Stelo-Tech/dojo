@@ -99,15 +99,18 @@ export class TerrainSystem {
     this.eraseStamp.setVisible(false);
   }
 
-  fillRect(worldX: number, worldY: number, width: number, height: number): void {
+  fillRect(worldX: number, worldY: number, width: number, height: number, color?: number): void {
     const localX = Math.floor(worldX - this.originX);
     const localY = Math.floor(worldY - this.originY);
     this.setGridRect(localX, localY, Math.ceil(width), Math.ceil(height), 1);
+    const useColor = color !== undefined ? color : TERRAIN_COLOR;
+    this.fillPixel.setFillStyle(useColor);
     this.fillPixel.setPosition(0, 0);
     this.fillPixel.setDisplaySize(width, height);
     this.fillPixel.setVisible(true);
     this.rt.draw(this.fillPixel, localX, localY);
     this.fillPixel.setVisible(false);
+    this.fillPixel.setFillStyle(TERRAIN_COLOR);
   }
 
   getTerrainTopY(): number {

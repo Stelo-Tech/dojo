@@ -3,37 +3,38 @@ import { gameEventBus } from '@/utils/EventBus';
 import {
   GAME_WIDTH,
   GAME_HEIGHT,
-  SKILLS_AVAILABLE,
-  SkillType,
+  TOOLS_AVAILABLE,
+  ToolType,
   HUD_BUTTON_WIDTH,
   HUD_BUTTON_HEIGHT,
   HUD_BUTTON_GAP,
-  SKILL_ICON_COLORS,
+  TOOL_ICON_COLORS,
+  TOOL_LABELS,
 } from '@/utils/Constants';
 
-interface SkillButton {
+interface ToolButton {
   background: Phaser.GameObjects.Rectangle;
   border: Phaser.GameObjects.Rectangle;
   icon: Phaser.GameObjects.Rectangle;
   label: Phaser.GameObjects.Text;
   countText: Phaser.GameObjects.Text;
-  skill: SkillType;
+  tool: ToolType;
 }
 
 export class HUD {
-  private readonly buttons: SkillButton[] = [];
+  private readonly buttons: ToolButton[] = [];
   private readonly statusText: Phaser.GameObjects.Text;
-  private readonly activeSkillIndicator: Phaser.GameObjects.Text;
-  private selectedSkill: SkillType | null = null;
-  private readonly skillCounts: Record<SkillType, number>;
+  private readonly activeToolIndicator: Phaser.GameObjects.Text;
+  private selectedTool: ToolType | null = null;
+  private readonly toolCounts: Record<ToolType, number>;
   private readonly hudUpdateHandler: (data: { alive: number; saved: number; dead: number }) => void;
 
   constructor(scene: Phaser.Scene) {
-    this.skillCounts = {
-      digger: SKILLS_AVAILABLE.digger,
-      builder: SKILLS_AVAILABLE.builder,
-      blocker: SKILLS_AVAILABLE.blocker,
-      climber: SKILLS_AVAILABLE.climber,
+    this.toolCounts = {
+      dig: TOOLS_AVAILABLE.dig,
+      stairs: TOOLS_AVAILABLE.stairs,
+      wall: TOOLS_AVAILABLE.wall,
+      ramp: TOOLS_AVAILABLE.ramp,
     };
 
     this.statusText = scene.add
@@ -45,7 +46,7 @@ export class HUD {
       })
       .setDepth(200);
 
-    this.activeSkillIndicator = scene.add
+    this.activeToolIndicator = scene.add
       .text(GAME_WIDTH - 8, 8, '', {
         fontSize: '16px',
         color: '#ffff00',
@@ -55,14 +56,14 @@ export class HUD {
       .setOrigin(1, 0)
       .setDepth(200);
 
-    const skills: SkillType[] = ['digger', 'builder', 'blocker', 'climber'];
-    const totalWidth = skills.length * HUD_BUTTON_WIDTH + (skills.length - 1) * HUD_BUTTON_GAP;
+    const tools: ToolType[] = ['dig', 'stairs', 'wall', 'ramp'];
+    const totalWidth = tools.length * HUD_BUTTON_WIDTH + (tools.length - 1) * HUD_BUTTON_GAP;
     const startX = (GAME_WIDTH - totalWidth) / 2;
     const buttonY = GAME_HEIGHT - 35;
 
-    for (let i = 0; i < skills.length; i++) {
-      const skill = skills[i];
-      if (!skill) continue;
+    for (let i = 0; i < tools.length; i++) {
+      const tool = tools[i];
+      if (!tool) continue;
 
       const bx = startX + i * (HUD_BUTTON_WIDTH + HUD_BUTTON_GAP) + HUD_BUTTON_WIDTH / 2;
       const by = buttonY;
@@ -78,12 +79,12 @@ export class HUD {
         .setDepth(200)
         .setInteractive({ useHandCursor: true });
 
-      const iconColor = SKILL_ICON_COLORS[skill];
+      const iconColor = TOOL_ICON_COLORS[tool];
       const icon = scene.add
         .rectangle(bx - HUD_BUTTON_WIDTH / 2 + 14, by - 6, 10, 10, iconColor)
         .setDepth(201);
 
-      const labelText = skill.charAt(0).toUpperCase() + skill.slice(1);
+      const labelText = TOOL_LABELS[tool];
       const label = scene.add
         .text(bx + 6, by - 6, labelText, {
           fontSize: '13px',
@@ -95,7 +96,7 @@ export class HUD {
         .setDepth(201);
 
       const countText = scene.add
-        .text(bx, by + 14, String(this.skillCounts[skill]), {
+        .text(bx, by + 14, String(this.toolCounts[tool]), {
           fontSize: '18px',
           color: '#aaaaaa',
           fontFamily: 'Arial',
@@ -105,10 +106,10 @@ export class HUD {
         .setDepth(201);
 
       background.on('pointerdown', () => {
-        this.selectSkill(skill);
+        this.selectTool(tool);
       });
 
-      this.buttons.push({ background, border, icon, label, countText, skill });
+      this.buttons.push({ background, border, icon, label, countText, tool });
     }
 
     this.hudUpdateHandler = (data: { alive: number; saved: number; dead: number }) => {
@@ -117,37 +118,37 @@ export class HUD {
       );
     };
     gameEventBus.on('hud:update', this.hudUpdateHandler);
-    gameEventBus.emit('skill:counts', { ...this.skillCounts });
+    gameEventBus.emit('tool:counts', { ...this.toolCounts });
   }
 
-  private selectSkill(skill: SkillType): void {
-    if (this.selectedSkill === skill) {
-      this.selectedSkill = null;
-      gameEventBus.emit('skill:selected', { skill: null });
+  private selectTool(tool: ToolType): void {
+    if (this.selectedTool === tool) {
+      this.selectedTool = null;
+      gameEventBus.emit('tool:selected', { tool: null });
     } else {
-      this.selectedSkill = skill;
-      gameEventBus.emit('skill:selected', { skill });
+      this.selectedTool = tool;
+      gameEventBus.emit('tool:selected', { tool });
     }
     this.updateButtonVisuals();
     this.updateActiveIndicator();
   }
 
-  getSelectedSkill(): SkillType | null {
-    return this.selectedSkill;
+  getSelectedTool(): ToolType | null {
+    return this.selectedTool;
   }
 
-  consumeSkill(skill: SkillType): boolean {
-    const count = this.skillCounts[skill];
+  consumeTool(tool: ToolType): boolean {
+    const count = this.toolCounts[tool];
     if (count <= 0) return false;
-    this.skillCounts[skill] = count - 1;
+    this.toolCounts[tool] = count - 1;
     this.updateCountTexts();
-    gameEventBus.emit('skill:counts', { ...this.skillCounts });
+    gameEventBus.emit('tool:counts', { ...this.toolCounts });
     return true;
   }
 
   private updateButtonVisuals(): void {
     for (const btn of this.buttons) {
-      if (btn.skill === this.selectedSkill) {
+      if (btn.tool === this.selectedTool) {
         btn.background.setFillStyle(0x555555);
         btn.border.setStrokeStyle(3, 0xffff00);
       } else {
@@ -159,16 +160,16 @@ export class HUD {
 
   private updateCountTexts(): void {
     for (const btn of this.buttons) {
-      btn.countText.setText(String(this.skillCounts[btn.skill]));
+      btn.countText.setText(String(this.toolCounts[btn.tool]));
     }
   }
 
   private updateActiveIndicator(): void {
-    if (this.selectedSkill) {
-      const label = this.selectedSkill.charAt(0).toUpperCase() + this.selectedSkill.slice(1);
-      this.activeSkillIndicator.setText(`Active: ${label}`);
+    if (this.selectedTool) {
+      const label = TOOL_LABELS[this.selectedTool];
+      this.activeToolIndicator.setText(`Active: ${label}`);
     } else {
-      this.activeSkillIndicator.setText('');
+      this.activeToolIndicator.setText('');
     }
   }
 
@@ -183,6 +184,6 @@ export class HUD {
     }
     this.buttons.length = 0;
     this.statusText.destroy();
-    this.activeSkillIndicator.destroy();
+    this.activeToolIndicator.destroy();
   }
 }
