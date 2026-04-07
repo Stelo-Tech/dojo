@@ -2,19 +2,13 @@ import Phaser from 'phaser';
 import {
   State,
   LemmingEntity,
-  TerrainAccess,
   WalkerState,
   FallerState,
   DeadState,
-  DiggerState,
-  BuilderState,
-  BlockerState,
-  ClimberState,
   SavedState,
 } from '@/entities/LemmingStates';
 import { gameEventBus } from '@/utils/EventBus';
 import {
-  SkillType,
   LEMMING_WIDTH,
   LEMMING_HEIGHT,
   STATE_COLORS,
@@ -22,7 +16,7 @@ import {
   DIRECTION_COLOR,
   FLASH_DURATION_DEATH,
   FLASH_DURATION_SAVED,
-  FLASH_DURATION_SKILL,
+  FLASH_DURATION_PLACEMENT,
 } from '@/utils/Constants';
 
 interface FlashState {
@@ -30,7 +24,7 @@ interface FlashState {
   elapsed: number;
   duration: number;
   color: number;
-  type: 'death' | 'saved' | 'skill' | 'none';
+  type: 'death' | 'saved' | 'selection' | 'none';
 }
 
 export class Lemming implements LemmingEntity {
@@ -41,9 +35,7 @@ export class Lemming implements LemmingEntity {
   fallDistance = 0;
   alive = false;
   saved = false;
-  isBlocker = false;
 
-  private readonly assignedSkills = new Set<SkillType>();
   private readonly states: ReadonlyMap<string, State<LemmingEntity>>;
   private currentState: State<LemmingEntity>;
   private currentStateName = 'walker';
@@ -52,7 +44,6 @@ export class Lemming implements LemmingEntity {
   private readonly directionIndicator: Phaser.GameObjects.Triangle;
   private changingState = false;
   private pendingState: string | null = null;
-  private terrainAccess: TerrainAccess | null = null;
 
   private readonly flash: FlashState = {
     active: false,
@@ -61,9 +52,6 @@ export class Lemming implements LemmingEntity {
     color: 0xffffff,
     type: 'none',
   };
-
-  private shakeOffset = 0;
-  private shakeTimer = 0;
 
   constructor(scene: Phaser.Scene, id: number) {
     this.id = id;
@@ -87,20 +75,12 @@ export class Lemming implements LemmingEntity {
     const walker = new WalkerState();
     const faller = new FallerState();
     const dead = new DeadState();
-    const digger = new DiggerState();
-    const builder = new BuilderState();
-    const blocker = new BlockerState();
-    const climber = new ClimberState();
     const savedState = new SavedState();
 
     this.states = new Map<string, State<LemmingEntity>>([
       ['walker', walker],
       ['faller', faller],
       ['dead', dead],
-      ['digger', digger],
-      ['builder', builder],
-      ['blocker', blocker],
-      ['climber', climber],
       ['saved', savedState],
     ]);
 
@@ -114,12 +94,8 @@ export class Lemming implements LemmingEntity {
     this.fallDistance = 0;
     this.alive = true;
     this.saved = false;
-    this.isBlocker = false;
     this.changingState = false;
     this.pendingState = null;
-    this.assignedSkills.clear();
-    this.shakeOffset = 0;
-    this.shakeTimer = 0;
 
     this.flash.active = false;
     this.flash.elapsed = 0;
@@ -149,7 +125,6 @@ export class Lemming implements LemmingEntity {
     if (!this.alive) return;
     this.currentState.update(this, dt);
     this.updateFlash(dt);
-    this.updateShake(dt);
     this.syncGraphic();
   }
 
@@ -192,42 +167,8 @@ export class Lemming implements LemmingEntity {
     return this.currentStateName;
   }
 
-  assignSkill(skill: SkillType): void {
-    if (skill === 'climber') {
-      this.assignedSkills.add('climber');
-      this.startFlash('skill');
-      gameEventBus.emit('skill:assigned', { lemmingId: this.id, skill });
-      return;
-    }
-
-    if (skill === 'blocker' && this.currentStateName !== 'walker') return;
-    if (skill === 'digger' && this.currentStateName !== 'walker') return;
-    if (skill === 'builder' && this.currentStateName !== 'walker') return;
-
-    this.assignedSkills.add(skill);
-    this.startFlash('skill');
-    this.changeState(skill);
-    gameEventBus.emit('skill:assigned', { lemmingId: this.id, skill });
-  }
-
-  hasSkill(skill: string): boolean {
-    return this.assignedSkills.has(skill as SkillType);
-  }
-
-  setColor(color: number): void {
-    this.body.setFillStyle(color);
-  }
-
-  setTerrainAccess(terrain: TerrainAccess): void {
-    this.terrainAccess = terrain;
-  }
-
-  getTerrainAccess(): TerrainAccess | null {
-    return this.terrainAccess;
-  }
-
   flashSelection(): void {
-    this.startFlash('skill');
+    this.startFlash('selection');
   }
 
   deactivate(): void {
@@ -244,13 +185,11 @@ export class Lemming implements LemmingEntity {
   }
 
   getBounds(): { x: number; y: number; width: number; height: number } {
-    const w = this.isBlocker ? 18 : LEMMING_WIDTH;
-    const h = this.isBlocker ? 18 : LEMMING_HEIGHT;
     return {
-      x: this.x - w / 2,
-      y: this.y - h,
-      width: w,
-      height: h,
+      x: this.x - LEMMING_WIDTH / 2,
+      y: this.y - LEMMING_HEIGHT,
+      width: LEMMING_WIDTH,
+      height: LEMMING_HEIGHT,
     };
   }
 
@@ -259,27 +198,19 @@ export class Lemming implements LemmingEntity {
     if (color !== undefined) {
       this.body.setFillStyle(color);
     }
-
-    if (this.currentStateName === 'blocker') {
-      this.body.setDisplaySize(18, 18);
-    } else {
-      this.body.setDisplaySize(LEMMING_WIDTH, LEMMING_HEIGHT);
-    }
-
+    this.body.setDisplaySize(LEMMING_WIDTH, LEMMING_HEIGHT);
     if (this.currentStateName === 'dead') {
       this.startFlash('death');
     }
-
     if (this.currentStateName === 'saved') {
       this.startFlash('saved');
     }
   }
 
-  private startFlash(type: 'death' | 'saved' | 'skill'): void {
+  private startFlash(type: 'death' | 'saved' | 'selection'): void {
     this.flash.active = true;
     this.flash.elapsed = 0;
     this.flash.type = type;
-
     switch (type) {
       case 'death':
         this.flash.duration = FLASH_DURATION_DEATH;
@@ -289,20 +220,17 @@ export class Lemming implements LemmingEntity {
         this.flash.duration = FLASH_DURATION_SAVED;
         this.flash.color = 0xffffff;
         break;
-      case 'skill':
-        this.flash.duration = FLASH_DURATION_SKILL;
+      case 'selection':
+        this.flash.duration = FLASH_DURATION_PLACEMENT;
         this.flash.color = 0xffff00;
         break;
     }
-
     this.body.setFillStyle(this.flash.color);
   }
 
   private updateFlash(dt: number): void {
     if (!this.flash.active) return;
-
     this.flash.elapsed += dt * 1000;
-
     if (this.flash.elapsed >= this.flash.duration) {
       this.flash.active = false;
       this.flash.type = 'none';
@@ -312,9 +240,7 @@ export class Lemming implements LemmingEntity {
       }
       return;
     }
-
     const progress = this.flash.elapsed / this.flash.duration;
-
     if (this.flash.type === 'saved') {
       const scale = 1 + progress * 0.5;
       this.body.setScale(scale);
@@ -328,21 +254,11 @@ export class Lemming implements LemmingEntity {
     }
   }
 
-  private updateShake(dt: number): void {
-    if (this.currentStateName !== 'digger') {
-      this.shakeOffset = 0;
-      return;
-    }
-    this.shakeTimer += dt * 1000;
-    this.shakeOffset = Math.sin(this.shakeTimer * 0.03) * 1;
-  }
-
   private syncGraphic(): void {
-    const displayY = this.y + this.shakeOffset;
-    this.body.setPosition(this.x, displayY);
-    this.hair.setPosition(this.x, displayY - LEMMING_HEIGHT);
+    this.body.setPosition(this.x, this.y);
+    this.hair.setPosition(this.x, this.y - LEMMING_HEIGHT);
     const dirOffsetX = this.direction * (LEMMING_WIDTH / 2 + 3);
-    const dirY = displayY - LEMMING_HEIGHT / 2;
+    const dirY = this.y - LEMMING_HEIGHT / 2;
     this.directionIndicator.setPosition(this.x + dirOffsetX, dirY);
     this.directionIndicator.setScale(this.direction, 1);
   }
