@@ -22,28 +22,36 @@ export const TERRAIN_Y = 450;
 export const TERRAIN_HEIGHT = 90;
 export const TERRAIN_COLOR = 0x8b4513;
 
-/** Skills */
-export const DIG_SPEED = 20;
-export const BUILD_INTERVAL = 400;
-export const BUILD_MAX_STEPS = 10;
-export const BUILD_STEP_WIDTH = 18;
-export const BUILD_STEP_HEIGHT = 4;
-
 /** Maximum step height a walker can auto-climb (pixels) */
 export const STEP_CLIMB_MAX = 6;
-export const CLIMB_SPEED = 20;
-export const CLIMB_MAX_HEIGHT = 60;
 
-/** Skill availability per level */
-export const SKILLS_AVAILABLE: Readonly<Record<SkillType, number>> = {
-  digger: 5,
-  builder: 5,
-  blocker: 3,
-  climber: 3,
+/** Tool type union — terrain placement tools */
+export type ToolType = 'dig' | 'stairs' | 'wall' | 'ramp';
+
+/** Tool: Stairs (place a staircase on terrain) */
+export const TOOL_STAIR_STEPS = 10;
+export const TOOL_STAIR_STEP_W = 18;
+export const TOOL_STAIR_STEP_H = 4;
+
+/** Tool: Dig (punch a hole in terrain) */
+export const TOOL_DIG_WIDTH = 20;
+export const TOOL_DIG_DEPTH = 40;
+
+/** Tool: Wall (place a vertical wall on terrain) */
+export const TOOL_WALL_WIDTH = 6;
+export const TOOL_WALL_HEIGHT = 20;
+
+/** Tool: Ramp (place a triangular ramp on terrain) */
+export const TOOL_RAMP_LENGTH = 60;
+export const TOOL_RAMP_HEIGHT = 30;
+
+/** Tool availability per level */
+export const TOOLS_AVAILABLE: Readonly<Record<ToolType, number>> = {
+  dig: 5,
+  stairs: 5,
+  wall: 3,
+  ramp: 3,
 };
-
-/** Skill type union */
-export type SkillType = 'digger' | 'builder' | 'blocker' | 'climber';
 
 /** Exit zone */
 export const EXIT_X = 850;
@@ -58,10 +66,6 @@ export const SPAWN_Y = 370;
 /** Visual colors per state */
 export const STATE_COLORS: Readonly<Record<string, number>> = {
   walker: 0x00ff00,
-  digger: 0xcd853f,
-  builder: 0x00ffff,
-  blocker: 0xff4444,
-  climber: 0xff00ff,
   faller: 0xffff00,
   dead: 0x666666,
   saved: 0xffffff,
@@ -76,7 +80,7 @@ export const DIRECTION_COLOR = 0xffaa00;
 /** Flash durations in ms */
 export const FLASH_DURATION_DEATH = 200;
 export const FLASH_DURATION_SAVED = 200;
-export const FLASH_DURATION_SKILL = 150;
+export const FLASH_DURATION_PLACEMENT = 150;
 
 /** Background colors */
 export const BG_COLOR_TOP = 0x0a0a1e;
@@ -91,13 +95,24 @@ export const HUD_BUTTON_WIDTH = 100;
 export const HUD_BUTTON_HEIGHT = 50;
 export const HUD_BUTTON_GAP = 12;
 
-/** Skill color mapping (matches STATE_COLORS for skill types) */
-export const SKILL_ICON_COLORS: Readonly<Record<SkillType, number>> = {
-  digger: 0xcd853f,
-  builder: 0x00ffff,
-  blocker: 0xff4444,
-  climber: 0xff00ff,
+/** Tool icon color mapping */
+export const TOOL_ICON_COLORS: Readonly<Record<ToolType, number>> = {
+  dig: 0xcd853f,
+  stairs: 0x00ffff,
+  wall: 0xff4444,
+  ramp: 0xff00ff,
 };
+
+/** Tool display labels */
+export const TOOL_LABELS: Readonly<Record<ToolType, string>> = {
+  dig: 'Dig',
+  stairs: 'Stairs',
+  wall: 'Wall',
+  ramp: 'Ramp',
+};
+
+/** Wall terrain color (darker than normal terrain) */
+export const WALL_TERRAIN_COLOR = 0x5a2d0a;
 
 /** Level geometry rect definition */
 interface LevelRect {
@@ -113,10 +128,10 @@ export const PLATFORM_LEFT: LevelRect = { x: 50, y: 390, w: 200, h: 15 };
 /** Danger ledge */
 export const LEFT_CLIFF_GAP: LevelRect = { x: 0, y: TERRAIN_Y, w: 120, h: 90 };
 
-/** Wide gap requiring Builder (80px = exact builder range) */
+/** Wide gap requiring Stairs (80px = exact stair range) */
 export const FOSSE_GAP: LevelRect = { x: 300, y: TERRAIN_Y, w: 80, h: 90 };
 
-/** Vertical wall — needs Climber */
+/** Vertical wall — needs Ramp or Dig */
 export const WALL_VERT: LevelRect = { x: 550, y: 380, w: 20, h: 70 };
 
 /** Platform behind wall leading to exit */
@@ -127,10 +142,6 @@ export const STAIR_1: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
 export const STAIR_2: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
 export const STAIR_3: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
 export const PRE_EXIT_GAP: LevelRect = { x: 0, y: 0, w: 0, h: 0 };
-
-/** Blocker collision detection */
-export const BLOCKER_DETECTION_RADIUS = 14;
-export const BLOCKER_VERTICAL_RANGE = 16;
 
 /** Spawn portal visual */
 export const SPAWN_PORTAL_WIDTH = 30;

@@ -1,12 +1,9 @@
 import { LemmingPool } from '@/entities/LemmingPool';
-import { Lemming } from '@/entities/Lemming';
 import { TerrainSystem } from '@/systems/TerrainSystem';
 import { gameEventBus } from '@/utils/EventBus';
 import {
   GAME_WIDTH,
   GAME_HEIGHT,
-  BLOCKER_DETECTION_RADIUS,
-  BLOCKER_VERTICAL_RANGE,
   STEP_CLIMB_MAX,
 } from '@/utils/Constants';
 
@@ -22,15 +19,6 @@ export class PhysicsSystem {
   update(_dt: number): void {
     const active = this.pool.getActive();
 
-    // Phase 1: collect all active blockers
-    const blockers: Lemming[] = [];
-    for (let i = active.length - 1; i >= 0; i--) {
-      const l = active[i];
-      if (l && l.alive && l.isBlocker) {
-        blockers.push(l);
-      }
-    }
-
     for (let i = active.length - 1; i >= 0; i--) {
       const lemming = active[i];
       if (!lemming || !lemming.alive) continue;
@@ -44,15 +32,9 @@ export class PhysicsSystem {
         continue;
       }
 
-      // Skip physics for self-managed states
-      if (state === 'blocker' || state === 'digger' || state === 'builder' || state === 'climber') {
-        continue;
-      }
-
-      const onGround = this.checkGround(lemming.x, lemming.y);
-
       // Faller landing
       if (state === 'faller') {
+        const onGround = this.checkGround(lemming.x, lemming.y);
         if (onGround) {
           lemming.y = this.snapToSurface(lemming.x, lemming.y);
           lemming.changeState('walker');
@@ -72,18 +54,12 @@ export class PhysicsSystem {
         // Always snap to surface
         lemming.y = this.snapToSurface(lemming.x, lemming.y);
 
-        // Blocker collision BEFORE wall/step detection
-        if (blockers.length > 0) {
-          this.handleBlockerCollision(lemming, blockers);
-        }
-
         // Step-climbing: detect low obstacles (1-STEP_CLIMB_MAX px) ahead
         const aheadX = lemming.x + lemming.direction * 6;
         const hasObstacleAtFeet = this.terrain.isGround(aheadX, lemming.y - 1);
         const hasObstacleAtBody = this.terrain.isGround(aheadX, lemming.y - (STEP_CLIMB_MAX + 4));
 
         if (hasObstacleAtFeet && !hasObstacleAtBody) {
-          // Low obstacle — find the top of the step
           let stepTopY = lemming.y - 1;
           for (let probe = 0; probe < STEP_CLIMB_MAX + 2; probe++) {
             if (this.terrain.isGround(aheadX, stepTopY - 1)) {
@@ -92,11 +68,10 @@ export class PhysicsSystem {
               break;
             }
           }
-          // Climb if within max step height
           const stepHeight = lemming.y - stepTopY;
           if (stepHeight > 0 && stepHeight <= STEP_CLIMB_MAX) {
             lemming.y = stepTopY;
-            continue; // skip wall detection — we climbed the step
+            continue;
           }
         }
 
@@ -108,41 +83,9 @@ export class PhysicsSystem {
         const wallAhead = wallAtLow && wallAtMid && wallAtHigh;
 
         if (wallAhead) {
-          if (lemming.hasSkill('climber')) {
-            lemming.changeState('climber');
-            continue;
-          }
           lemming.direction = lemming.direction === 1 ? -1 : 1;
           continue;
         }
-      }
-    }
-  }
-
-  private handleBlockerCollision(walker: Lemming, blockerList: readonly Lemming[]): void {
-    for (let j = 0; j < blockerList.length; j++) {
-      const blocker = blockerList[j];
-      if (!blocker || blocker.id === walker.id) continue;
-
-      const dx = walker.x - blocker.x;
-      const dy = Math.abs(walker.y - blocker.y);
-
-      if (Math.abs(dx) >= BLOCKER_DETECTION_RADIUS || dy >= BLOCKER_VERTICAL_RANGE) {
-        continue;
-      }
-
-      if (dx > 0 && walker.direction === -1) {
-        walker.direction = 1;
-        break;
-      }
-      if (dx < 0 && walker.direction === 1) {
-        walker.direction = -1;
-        break;
-      }
-      if (Math.abs(dx) < 3) {
-        walker.direction = dx >= 0 ? 1 : -1;
-        walker.x = blocker.x + walker.direction * 3;
-        break;
       }
     }
   }

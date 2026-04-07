@@ -55,10 +55,9 @@ export type GameEvents = {
   'lemming:saved': { id: number };
   'lemming:died': { id: number; cause: string };
   'lemming:stateChanged': { id: number; from: string; to: string };
-  'skill:assigned': { lemmingId: number; skill: string };
-  'skill:selected': { skill: string | null };
-  'skill:counts': { digger: number; builder: number; blocker: number; climber: number };
-  'hud:lemmingTapped': { lemmingId: number };
+  'tool:selected': { tool: string | null };
+  'tool:placed': { tool: string; x: number; y: number };
+  'tool:counts': { dig: number; stairs: number; wall: number; ramp: number };
   'hud:update': { alive: number; saved: number; dead: number };
   'level:complete': { saved: number; total: number };
   'level:allSpawned': Record<string, never>;
