@@ -7,6 +7,7 @@ skills:
   - context7
   - level-design
   - ts-types
+  - game-development
 maxTurns: 30
 color: purple
 ---
