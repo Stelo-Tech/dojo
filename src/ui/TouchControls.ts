@@ -35,6 +35,11 @@ export class TouchControls {
   private readonly onPointerDownBound: (pointer: Phaser.Input.Pointer) => void;
   private readonly onPointerMoveBound: (pointer: Phaser.Input.Pointer) => void;
 
+  /** Direction for stairs/ramp placement (1=right, -1=left) */
+  private toolDirection: 1 | -1 = 1;
+  private dirButton: Phaser.GameObjects.Graphics | null = null;
+  private dirLabel: Phaser.GameObjects.Text | null = null;
+
   /** Preview ghost graphics */
   private preview: Phaser.GameObjects.Graphics;
 
@@ -62,6 +67,50 @@ export class TouchControls {
     };
     this.scene.input.on('pointerdown', this.onPointerDownBound);
     this.scene.input.on('pointermove', this.onPointerMoveBound);
+
+    this.createDirectionButton();
+  }
+
+  private createDirectionButton(): void {
+    const btnX = GAME_WIDTH - 60;
+    const btnY = HUD_BAR_Y + 12;
+    const btnW = 48;
+    const btnH = 48;
+
+    this.dirButton = this.scene.add.graphics().setDepth(200).setScrollFactor(0);
+    this.drawDirButton();
+
+    this.dirLabel = this.scene.add.text(btnX + btnW / 2, btnY + btnH / 2, '>>>', {
+      fontSize: '16px',
+      color: '#66aaff',
+      fontFamily: 'Arial',
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(201).setScrollFactor(0);
+
+    const hit = this.scene.add.rectangle(btnX + btnW / 2, btnY + btnH / 2, btnW, btnH)
+      .setInteractive({ useHandCursor: true })
+      .setAlpha(0.001)
+      .setDepth(202)
+      .setScrollFactor(0);
+
+    hit.on('pointerdown', () => {
+      this.toolDirection = this.toolDirection === 1 ? -1 : 1;
+      this.drawDirButton();
+      if (this.dirLabel) {
+        this.dirLabel.setText(this.toolDirection === 1 ? '>>>' : '<<<');
+      }
+    });
+  }
+
+  private drawDirButton(): void {
+    if (!this.dirButton) return;
+    const btnX = GAME_WIDTH - 60;
+    const btnY = HUD_BAR_Y + 12;
+    this.dirButton.clear();
+    this.dirButton.fillStyle(0x1a2540, 1);
+    this.dirButton.fillRoundedRect(btnX, btnY, 48, 48, 6);
+    this.dirButton.lineStyle(1, 0x334466, 0.8);
+    this.dirButton.strokeRoundedRect(btnX, btnY, 48, 48, 6);
   }
 
   private isInExitZone(x: number, y: number): boolean {
@@ -102,7 +151,7 @@ export class TouchControls {
         g.lineBetween(worldX + TOOL_DIG_WIDTH / 2, worldY, worldX - TOOL_DIG_WIDTH / 2, worldY + TOOL_DIG_DEPTH);
         break;
       case 'stairs': {
-        const direction = worldX < GAME_WIDTH / 2 ? 1 : -1;
+        const direction = this.toolDirection;
         g.fillStyle(previewColor, 0.3);
         g.lineStyle(1, previewColor, 0.6);
         for (let step = 0; step < TOOL_STAIR_STEPS; step++) {
@@ -122,7 +171,7 @@ export class TouchControls {
         g.strokeRect(worldX - TOOL_WALL_WIDTH / 2, worldY - TOOL_WALL_HEIGHT, TOOL_WALL_WIDTH, TOOL_WALL_HEIGHT);
         break;
       case 'ramp': {
-        const dir = worldX < GAME_WIDTH / 2 ? 1 : -1;
+        const dir = this.toolDirection;
         g.fillStyle(previewColor, 0.3);
         if (dir === 1) {
           g.fillTriangle(worldX, worldY, worldX + TOOL_RAMP_LENGTH, worldY, worldX + TOOL_RAMP_LENGTH, worldY - TOOL_RAMP_HEIGHT);
@@ -176,7 +225,7 @@ export class TouchControls {
   }
 
   private placeStairs(worldX: number, worldY: number): void {
-    const direction = worldX < GAME_WIDTH / 2 ? 1 : -1;
+    const direction = this.toolDirection;
     for (let step = 0; step < TOOL_STAIR_STEPS; step++) {
       const stepX = direction === 1
         ? worldX + step * TOOL_STAIR_STEP_W
@@ -193,7 +242,7 @@ export class TouchControls {
   }
 
   private placeRamp(worldX: number, worldY: number): void {
-    const direction = worldX < GAME_WIDTH / 2 ? 1 : -1;
+    const direction = this.toolDirection;
     const sliceCount = TOOL_RAMP_LENGTH;
     for (let col = 0; col < sliceCount; col++) {
       const progress = (col + 1) / sliceCount;
@@ -236,6 +285,8 @@ export class TouchControls {
     this.scene.input.off('pointerdown', this.onPointerDownBound);
     this.scene.input.off('pointermove', this.onPointerMoveBound);
     this.preview.destroy();
+    if (this.dirButton) { this.dirButton.destroy(); this.dirButton = null; }
+    if (this.dirLabel) { this.dirLabel.destroy(); this.dirLabel = null; }
     for (const flash of this.flashPool) {
       flash.destroy();
     }
