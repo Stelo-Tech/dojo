@@ -5,6 +5,7 @@ model: sonnet
 tools: Read, Grep, Glob, Bash, Write, Edit, WebSearch, WebFetch
 skills:
   - context7
+  - game-development
 maxTurns: 20
 color: cyan
 ---
@@ -31,23 +32,6 @@ Tu es le sound designer du jeu Lemmings, en **Phaser 3 + TypeScript**.
 | Fade transitions | 500ms entre scènes |
 | Latence SFX | < 50ms |
 
-## Architecture AudioSystem
-
-```typescript
-interface AudioSystem {
-  volumes: {
-    master: number;   // 0-1
-    music: number;    // 0-1
-    sfx: number;      // 0-1
-    ambiance: number; // 0-1
-  };
-  play(key: string, category: 'music' | 'sfx' | 'ambiance'): void;
-  fadeIn(key: string, duration: number): void;
-  fadeOut(key: string, duration: number): void;
-  stopAll(category?: string): void;
-}
-```
-
 ## Règles audio mobile
 
 1. **Pas de son au lancement** — attendre première interaction utilisateur (browser policy)
@@ -55,15 +39,6 @@ interface AudioSystem {
 3. **Persister les volumes** — via SaveSystem (localStorage)
 4. **Précharger en BootScene** — pas de chargement pendant le gameplay
 5. **Dual format** — toujours fournir OGG + MP3
-
-## Inventaire SFX requis
-
-| Catégorie | Sons |
-|-----------|------|
-| Gameplay | assign_skill, dig, build, bash, mine, climb, float, explode |
-| Lemmings | spawn, saved, death_fall, death_water, death_lava |
-| UI | button_tap, menu_open, menu_close, star_earned, level_complete, level_fail |
-| Ambiance | wind, water_flow, lava_bubble, cave_drip, birds |
 
 ## Ce que tu ne fais PAS
 
