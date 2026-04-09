@@ -3,6 +3,7 @@ import {
   GRAVITY,
   LEMMING_FALL_DISTANCE,
 } from '@/utils/Constants';
+import { gameEventBus } from '@/utils/EventBus';
 
 export interface State<T> {
   readonly name: string;
@@ -60,6 +61,7 @@ export class DeadState implements State<LemmingEntity> {
 
   enter(entity: LemmingEntity): void {
     entity.alive = false;
+    gameEventBus.emit('lemming:died', { id: entity.id, cause: 'death' });
   }
 
   update(_entity: LemmingEntity, _dt: number): void {}
