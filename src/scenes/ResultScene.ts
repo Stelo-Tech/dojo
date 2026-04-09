@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/utils/Constants';
 import { LevelData } from '@/levels/LevelData';
+import { saveProgress } from '@/scenes/LevelSelectScene';
 
 export interface ResultSceneData {
   saved: number;
@@ -40,6 +41,12 @@ export class ResultScene extends Phaser.Scene {
 
     const won = d.saved >= d.required;
     const stars = this.getStars(d.saved, d.total, d.required);
+
+    // Save progression
+    if (d.levelData) {
+      const levelKey = `${d.tier}-${d.levelData.seed}`;
+      saveProgress(levelKey, stars);
+    }
 
     // Dark overlay
     this.add.rectangle(CX, CY, GAME_WIDTH, GAME_HEIGHT, 0x060a14, 0.9).setDepth(0);
