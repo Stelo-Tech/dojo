@@ -74,6 +74,7 @@ export class DeadState implements State<LemmingEntity> {
 
   enter(entity: LemmingEntity): void {
     entity.alive = false;
+    gameEventBus.emit('lemming:died', { id: entity.id, cause: 'death' });
   }
 
   update(_entity: LemmingEntity, _dt: number): void {}

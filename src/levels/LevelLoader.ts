@@ -1,47 +1,20 @@
-import { LevelData } from '@/levels/LevelTypes';
-import { LevelValidator } from '@/levels/LevelValidator';
+import { TerrainSystem } from '@/systems/TerrainSystem';
+import { LevelData } from '@/levels/LevelData';
 
+/**
+ * Thin bridge between LevelData and TerrainSystem.
+ * Applies terrain geometry from a generated/loaded level.
+ */
 export class LevelLoader {
-  private static readonly levels: Map<number, LevelData> = new Map();
-
-  static registerLevel(level: LevelData): void {
-    const result = LevelValidator.validate(level);
-    if (!result.valid) {
-      throw new Error(
-        `Level ${level.id} ("${level.name}") failed validation:\n${result.errors.join('\n')}`,
-      );
+  load(levelData: LevelData, terrain: TerrainSystem): void {
+    // Apply fills first (base ground, platforms, walls)
+    for (const rect of levelData.terrainFills) {
+      terrain.fillRect(rect.x, rect.y, rect.w, rect.h);
     }
-    if (result.warnings.length > 0) {
-      result.warnings.forEach((w) => {
-        console.warn(`[LevelLoader] Level ${level.id} warning: ${w}`);
-      });
+
+    // Then apply erases (gaps, pits)
+    for (const rect of levelData.terrainErases) {
+      terrain.eraseRect(rect.x, rect.y, rect.w, rect.h);
     }
-    if (LevelLoader.levels.has(level.id)) {
-      throw new Error(`Level with id ${level.id} is already registered`);
-    }
-    LevelLoader.levels.set(level.id, level);
-  }
-
-  static getLevel(id: number): LevelData | undefined {
-    return LevelLoader.levels.get(id);
-  }
-
-  static getAllLevels(): readonly LevelData[] {
-    return Array.from(LevelLoader.levels.values()).sort((a, b) => a.id - b.id);
-  }
-
-  static getLevelCount(): number {
-    return LevelLoader.levels.size;
-  }
-
-  static getLevelsByDifficulty(difficulty: string): readonly LevelData[] {
-    return Array.from(LevelLoader.levels.values())
-      .filter((l) => l.difficulty === difficulty)
-      .sort((a, b) => a.id - b.id);
-  }
-
-  /** Clear all registered levels — useful for testing */
-  static clearAll(): void {
-    LevelLoader.levels.clear();
   }
 }

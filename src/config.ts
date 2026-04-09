@@ -13,6 +13,10 @@ export const config: Phaser.Types.Core.GameConfig = {
   height: GAME_HEIGHT,
   parent: 'game-container',
   backgroundColor: '#000000',
+  // Smooth rendering — bilinear filtering on all textures
+  pixelArt: false,
+  roundPixels: false,
+  antialias: true,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

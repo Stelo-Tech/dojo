@@ -1,9 +1,8 @@
 import { LemmingPool } from '@/entities/LemmingPool';
 import { TerrainSystem } from '@/systems/TerrainSystem';
-import { gameEventBus } from '@/utils/EventBus';
 import {
   GAME_WIDTH,
-  GAME_HEIGHT,
+  HUD_BAR_Y,
   STEP_CLIMB_MAX,
 } from '@/utils/Constants';
 
@@ -26,8 +25,7 @@ export class PhysicsSystem {
       const state = lemming.getStateName();
 
       // Out-of-bounds kill
-      if (lemming.x < 0 || lemming.x > GAME_WIDTH || lemming.y > GAME_HEIGHT) {
-        gameEventBus.emit('lemming:died', { id: lemming.id, cause: 'out-of-bounds' });
+      if (lemming.x < 0 || lemming.x > GAME_WIDTH || lemming.y > HUD_BAR_Y) {
         lemming.changeState('dead');
         continue;
       }
@@ -102,7 +100,7 @@ export class PhysicsSystem {
   }
 
   private snapToSurface(x: number, startY: number): number {
-    let surfaceY = startY;
+    let surfaceY = Math.floor(startY);
     for (let probe = 0; probe < 14; probe++) {
       if (this.checkGround(x, surfaceY - 1)) {
         surfaceY--;

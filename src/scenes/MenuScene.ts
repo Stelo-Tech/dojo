@@ -16,7 +16,7 @@ export class MenuScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5);
 
-    const tapText = this.add.text(centerX, centerY + 40, 'Tap to Play', {
+    const tapText = this.add.text(centerX, centerY + 40, 'Appuyer pour jouer', {
       fontSize: '24px',
       color: '#aaaaaa',
       fontFamily: 'Arial',

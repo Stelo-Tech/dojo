@@ -1,202 +1,207 @@
-import { LevelData, LevelRect, LevelToolConfig } from '@/levels/LevelTypes';
-import { GAME_WIDTH, GAME_HEIGHT } from '@/utils/Constants';
+import {
+  GAME_WIDTH,
+  TERRAIN_Y,
+  TOOL_STAIR_STEPS,
+  TOOL_STAIR_STEP_W,
+  TOOL_STAIR_STEP_H,
+  TOOL_DIG_WIDTH,
+  TOOL_RAMP_LENGTH,
+  TOOL_RAMP_HEIGHT,
+  STEP_CLIMB_MAX,
+  ToolType,
+} from '@/utils/Constants';
+import { LevelData } from '@/levels/LevelData';
 
 export interface ValidationResult {
-  readonly valid: boolean;
-  readonly errors: readonly string[];
-  readonly warnings: readonly string[];
+  readonly solvable: boolean;
+  readonly reason: string;
+  readonly toolsUsed: Readonly<Record<ToolType, number>>;
 }
 
-function rectsOverlap(ax: number, ay: number, aw: number, ah: number, rect: LevelRect): boolean {
-  return ax < rect.x + rect.w && ax + aw > rect.x && ay < rect.y + rect.h && ay + ah > rect.y;
-}
+/** No ground marker */
+const NO_GROUND = 9999;
 
-function pointInRect(px: number, py: number, rect: LevelRect): boolean {
-  return px >= rect.x && px < rect.x + rect.w && py >= rect.y && py < rect.y + rect.h;
-}
-
-function isPointInsideTerrain(x: number, y: number, terrain: readonly LevelRect[]): boolean {
-  return terrain.some((r) => pointInRect(x, y, r));
-}
-
-function countToolTypes(tools: LevelToolConfig): number {
-  return (Object.keys(tools) as (keyof LevelToolConfig)[]).filter((k) => {
-    const v = tools[k];
-    return v !== undefined && v > 0;
-  }).length;
-}
-
-function validateToolValues(tools: LevelToolConfig): string[] {
-  const errors: string[] = [];
-  (Object.entries(tools) as [string, number | undefined][]).forEach(([key, value]) => {
-    if (value === undefined) return;
-    if (!Number.isInteger(value) || value < 0) {
-      errors.push(`Tool "${key}" must be a non-negative integer, got ${String(value)}`);
-    }
-  });
-  return errors;
-}
-
+/**
+ * Validates that a generated level is solvable by simulating a walker
+ * with optimal tool usage. Pure logic — no Phaser dependency.
+ */
 export class LevelValidator {
-  static validate(level: LevelData): ValidationResult {
-    const errors: string[] = [];
-    const warnings: string[] = [];
+  validate(level: LevelData): ValidationResult {
+    // Build 1D heightmap: groundY[x] = topmost Y of ground at column x
+    const groundY = this.buildHeightmap(level);
 
-    // ID must be positive integer
-    if (!Number.isInteger(level.id) || level.id <= 0) {
-      errors.push(`Level id must be a positive integer, got ${String(level.id)}`);
-    }
+    // Simulate walker
+    let x = Math.floor(level.spawn.x);
+    let y = this.findSurface(groundY, x);
+    const exitLeft = Math.floor(level.exit.x);
+    const exitRight = Math.floor(level.exit.x + level.exit.width);
+    const exitSurfaceY = this.findSurface(groundY, Math.floor((exitLeft + exitRight) / 2));
 
-    // Name must be non-empty
-    if (level.name.trim().length === 0) {
-      errors.push('Level name must not be empty');
-    }
+    const toolsUsed: Record<ToolType, number> = { dig: 0, stairs: 0, wall: 0, ramp: 0 };
+    let direction = 1;
+    let turnCount = 0;
+    const maxSteps = GAME_WIDTH * 4;
 
-    // At least one terrain rect
-    if (level.terrain.length === 0) {
-      errors.push('Level must have at least one terrain rect');
-    }
-
-    // par <= spawn.count
-    if (level.par > level.spawn.count) {
-      errors.push(
-        `par (${level.par}) must not exceed spawn.count (${level.spawn.count})`,
-      );
-    }
-
-    // spawn.count must be positive
-    if (!Number.isInteger(level.spawn.count) || level.spawn.count <= 0) {
-      errors.push(`spawn.count must be a positive integer, got ${String(level.spawn.count)}`);
-    }
-
-    // spawn.rate must be positive
-    if (level.spawn.rate <= 0) {
-      errors.push(`spawn.rate must be positive, got ${String(level.spawn.rate)}`);
-    }
-
-    // Tool values: non-negative integers
-    const toolErrors = validateToolValues(level.tools);
-    errors.push(...toolErrors);
-
-    // Max 5 tool types (surcharge cognitive rule)
-    const toolTypeCount = countToolTypes(level.tools);
-    if (toolTypeCount > 5) {
-      errors.push(
-        `Level has ${toolTypeCount} tool types; maximum allowed is 5 (cognitive overload)`,
-      );
-    }
-
-    // Level dimensions: terrain rects fit within GAME_WIDTH x GAME_HEIGHT
-    level.terrain.forEach((rect, i) => {
-      if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > GAME_WIDTH || rect.y + rect.h > GAME_HEIGHT) {
-        errors.push(
-          `Terrain rect [${i}] (x=${rect.x}, y=${rect.y}, w=${rect.w}, h=${rect.h}) exceeds game bounds (${GAME_WIDTH}x${GAME_HEIGHT})`,
-        );
+    for (let step = 0; step < maxSteps; step++) {
+      // Check victory
+      if (x >= exitLeft && x <= exitRight && Math.abs(y - exitSurfaceY) <= 5) {
+        return { solvable: true, reason: 'path found', toolsUsed };
       }
-    });
 
-    // Spawn point not inside terrain
-    const spawnInsideTerrain = isPointInsideTerrain(level.spawn.x, level.spawn.y, level.terrain);
-    if (spawnInsideTerrain) {
-      errors.push(
-        `Spawn point (${level.spawn.x}, ${level.spawn.y}) is inside a terrain rect`,
-      );
+      const nextX = x + direction;
+
+      // Out of bounds — turn around
+      if (nextX < 0 || nextX >= GAME_WIDTH) {
+        direction *= -1;
+        turnCount++;
+        if (turnCount > level.segments.length * 6 + 10) {
+          return { solvable: false, reason: `stuck: too many turns at x=${x}`, toolsUsed };
+        }
+        continue;
+      }
+
+      const nextGroundY = groundY[nextX];
+
+      // Case 1: No ground ahead — gap
+      if (nextGroundY === undefined || nextGroundY === NO_GROUND) {
+        // Find gap extent
+        const gapStart = nextX;
+        let gapEnd = gapStart;
+        while (gapEnd < GAME_WIDTH && (groundY[gapEnd] === NO_GROUND || groundY[gapEnd] === undefined)) {
+          gapEnd++;
+        }
+        const gapWidth = gapEnd - gapStart;
+
+        // Try stairs
+        const stairSpan = TOOL_STAIR_STEPS * TOOL_STAIR_STEP_W;
+        if (gapWidth <= stairSpan && toolsUsed.stairs < level.toolBudget.stairs) {
+          // Place virtual stairs across gap
+          toolsUsed.stairs++;
+          for (let col = gapStart; col < gapEnd && col < GAME_WIDTH; col++) {
+            const stepIdx = Math.floor((col - gapStart) / TOOL_STAIR_STEP_W);
+            const stepY = y - (stepIdx + 1) * TOOL_STAIR_STEP_H;
+            groundY[col] = Math.min(groundY[col] ?? NO_GROUND, stepY);
+          }
+          // Continue walking — ground is now filled
+          continue;
+        }
+
+        // Can't bridge — turn around
+        direction *= -1;
+        turnCount++;
+        if (turnCount > level.segments.length * 6 + 10) {
+          return { solvable: false, reason: `unbridgeable gap (${gapWidth}px) at x=${gapStart}`, toolsUsed };
+        }
+        continue;
+      }
+
+      // Case 2: Ground ahead — check elevation difference
+      const dy = y - (nextGroundY ?? y);  // positive = next is higher (wall/step)
+
+      if (dy < -STEP_CLIMB_MAX) {
+        // Dropping down — check if it's a fatal fall
+        // Just walk down (lemmings can handle non-fatal drops)
+        x = nextX;
+        y = nextGroundY ?? y;
+        continue;
+      }
+
+      if (dy >= -STEP_CLIMB_MAX && dy <= STEP_CLIMB_MAX) {
+        // Small step — auto-climb
+        x = nextX;
+        y = nextGroundY ?? y;
+        continue;
+      }
+
+      // Wall ahead — elevation too high to climb
+      if (dy > STEP_CLIMB_MAX) {
+        // Measure wall height
+        const wallHeight = dy;
+
+        // Try ramp (if wall isn't too tall)
+        if (wallHeight <= TOOL_RAMP_HEIGHT && toolsUsed.ramp < level.toolBudget.ramp) {
+          toolsUsed.ramp++;
+          // Place virtual ramp
+          const rampDir = direction;
+          for (let col = 0; col < TOOL_RAMP_LENGTH; col++) {
+            const rx = x + rampDir * col;
+            if (rx < 0 || rx >= GAME_WIDTH) break;
+            const progress = (col + 1) / TOOL_RAMP_LENGTH;
+            const rampY = y - Math.floor(TOOL_RAMP_HEIGHT * progress);
+            groundY[rx] = Math.min(groundY[rx] ?? NO_GROUND, rampY);
+          }
+          continue;
+        }
+
+        // Try dig (punch through wall)
+        if (toolsUsed.dig < level.toolBudget.dig) {
+          toolsUsed.dig++;
+          // Erase wall columns ahead
+          const digStart = direction === 1 ? nextX : nextX - TOOL_DIG_WIDTH;
+          for (let col = digStart; col < digStart + TOOL_DIG_WIDTH && col < GAME_WIDTH; col++) {
+            if (col >= 0) {
+              const current = groundY[col];
+              if (current !== undefined && current !== NO_GROUND && current < y) {
+                // Reset to terrain level (dig through the wall)
+                groundY[col] = y;
+              }
+            }
+          }
+          continue;
+        }
+
+        // Can't pass — turn around
+        direction *= -1;
+        turnCount++;
+        if (turnCount > level.segments.length * 6 + 10) {
+          return { solvable: false, reason: `impassable wall (${wallHeight}px) at x=${nextX}`, toolsUsed };
+        }
+        continue;
+      }
+
+      // Default: advance
+      x = nextX;
+      y = nextGroundY ?? y;
     }
 
-    // Spawn point must have terrain below it (within GAME_HEIGHT)
-    const spawnHasGround = level.terrain.some((rect) => {
-      // A terrain rect starts at or below spawn.y within a reasonable distance
-      return (
-        level.spawn.x >= rect.x &&
-        level.spawn.x < rect.x + rect.w &&
-        rect.y >= level.spawn.y &&
-        rect.y <= GAME_HEIGHT
-      );
-    });
-    if (!spawnHasGround && !spawnInsideTerrain) {
-      errors.push(
-        `Spawn point (${level.spawn.x}, ${level.spawn.y}) has no terrain below it — lemmings will fall off screen`,
-      );
-    }
+    return { solvable: false, reason: 'exceeded max steps', toolsUsed };
+  }
 
-    // Exit not fully enclosed by terrain (must have at least one side free)
-    const exitRect = level.exit;
-    const exitFullyEnclosed = level.terrain.every((rect) =>
-      rectsOverlap(exitRect.x, exitRect.y, exitRect.w, exitRect.h, rect),
-    );
-    // A simpler heuristic: if every surrounding pixel is terrain, exit is blocked.
-    // We check that exit zone itself is not inside a solid terrain block.
-    const exitCenterX = exitRect.x + exitRect.w / 2;
-    const exitCenterY = exitRect.y + exitRect.h / 2;
-    if (level.terrain.length > 0 && exitFullyEnclosed) {
-      // Only truly enclosed if a single terrain rect fully covers the exit
-      const exitCoveredBySingleRect = level.terrain.some(
-        (rect) =>
-          exitRect.x >= rect.x &&
-          exitRect.y >= rect.y &&
-          exitRect.x + exitRect.w <= rect.x + rect.w &&
-          exitRect.y + exitRect.h <= rect.y + rect.h,
-      );
-      if (exitCoveredBySingleRect) {
-        errors.push(
-          `Exit at (${exitRect.x}, ${exitRect.y}) is fully enclosed within a terrain rect`,
-        );
+  private buildHeightmap(level: LevelData): number[] {
+    const groundY = new Array<number>(GAME_WIDTH).fill(NO_GROUND);
+
+    // Apply fills: for each column, track the topmost solid Y
+    for (const rect of level.terrainFills) {
+      const x0 = Math.max(0, Math.floor(rect.x));
+      const x1 = Math.min(GAME_WIDTH, Math.floor(rect.x + rect.w));
+      const top = Math.floor(rect.y);
+      for (let col = x0; col < x1; col++) {
+        const current = groundY[col];
+        if (current === undefined || current === NO_GROUND || top < current) {
+          groundY[col] = top;
+        }
       }
     }
 
-    // Exit must be within game bounds
-    if (
-      exitRect.x < 0 ||
-      exitRect.y < 0 ||
-      exitRect.x + exitRect.w > GAME_WIDTH ||
-      exitRect.y + exitRect.h > GAME_HEIGHT
-    ) {
-      errors.push(
-        `Exit (x=${exitRect.x}, y=${exitRect.y}, w=${exitRect.w}, h=${exitRect.h}) exceeds game bounds (${GAME_WIDTH}x${GAME_HEIGHT})`,
-      );
+    // Apply erases: remove ground in erased regions
+    for (const rect of level.terrainErases) {
+      const x0 = Math.max(0, Math.floor(rect.x));
+      const x1 = Math.min(GAME_WIDTH, Math.floor(rect.x + rect.w));
+      const eraseTop = Math.floor(rect.y);
+      const eraseBottom = Math.floor(rect.y + rect.h);
+      for (let col = x0; col < x1; col++) {
+        const current = groundY[col];
+        if (current !== undefined && current !== NO_GROUND && current >= eraseTop && current < eraseBottom) {
+          groundY[col] = NO_GROUND;
+        }
+      }
     }
 
-    // Spawn must be within game bounds
-    if (
-      level.spawn.x < 0 ||
-      level.spawn.x > GAME_WIDTH ||
-      level.spawn.y < 0 ||
-      level.spawn.y > GAME_HEIGHT
-    ) {
-      errors.push(
-        `Spawn point (${level.spawn.x}, ${level.spawn.y}) is outside game bounds (${GAME_WIDTH}x${GAME_HEIGHT})`,
-      );
-    }
+    return groundY;
+  }
 
-    // Warn about suspicious exit center being inside terrain (may be hard to reach)
-    const exitCenterInTerrain = isPointInsideTerrain(exitCenterX, exitCenterY, level.terrain);
-    if (exitCenterInTerrain) {
-      warnings.push(
-        `Exit center (${exitCenterX}, ${exitCenterY}) is inside terrain — verify exit is reachable`,
-      );
-    }
-
-    // Warn if par is very low (< 50% of spawn.count)
-    if (level.par < level.spawn.count * 0.5) {
-      warnings.push(
-        `par (${level.par}) is less than 50% of spawn.count (${level.spawn.count}) — level may be too easy`,
-      );
-    }
-
-    // Warn about zero tool types for non-tutorial levels
-    if (toolTypeCount === 0 && level.difficulty !== 'tutorial') {
-      warnings.push('Non-tutorial level has no tools — verify lemmings can reach exit unaided');
-    }
-
-    // Warn about timeLimit
-    if (level.timeLimit !== undefined && level.timeLimit <= 0) {
-      errors.push(`timeLimit must be a positive number if provided, got ${String(level.timeLimit)}`);
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-      warnings,
-    };
+  private findSurface(groundY: number[], x: number): number {
+    const gy = groundY[Math.max(0, Math.min(x, GAME_WIDTH - 1))];
+    return gy !== undefined && gy !== NO_GROUND ? gy : TERRAIN_Y;
   }
 }

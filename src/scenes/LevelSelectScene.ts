@@ -1,217 +1,239 @@
 import Phaser from 'phaser';
-import {
-  GAME_WIDTH,
-  GAME_HEIGHT,
-  BG_COLOR_TOP,
-  BG_COLOR_MID,
-  BG_COLOR_BOTTOM,
-} from '@/utils/Constants';
-import { Button } from '@/ui/components/Button';
+import { GAME_WIDTH, GAME_HEIGHT } from '@/utils/Constants';
+import { LevelGenerator, DIFFICULTY_PRESETS } from '@/levels/LevelGenerator';
+import { LevelValidator } from '@/levels/LevelValidator';
+import { DifficultyConfig } from '@/levels/LevelData';
 
-interface LevelEntry {
-  readonly id: number;
-  readonly name: string;
-  readonly difficulty: 1 | 2 | 3;
-  readonly unlocked: boolean;
+const LEVELS_PER_TIER = 6;
+
+const TIERS = [
+  { name: 'Tutoriel', color: 0x4ade80, lemmings: 10 },
+  { name: 'Facile',   color: 0x60a5fa, lemmings: 15 },
+  { name: 'Normal',   color: 0xfbbf24, lemmings: 20 },
+  { name: 'Difficile', color: 0xf97316, lemmings: 25 },
+  { name: 'Expert',   color: 0xef4444, lemmings: 30 },
+];
+
+function loadProgress(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem('lemmings_progress');
+    if (raw) return JSON.parse(raw) as Record<string, number>;
+  } catch { /* ignore */ }
+  return {};
 }
 
-/**
- * LevelSelectScene — grid of level buttons.
- * 5 hardcoded levels (will connect to LevelLoader in a later milestone).
- * Level 1 is always unlocked; subsequent levels are unlocked once the
- * previous one has been beaten (saved via localStorage key "level_<n>_done").
- */
+export function saveProgress(levelKey: string, stars: number): void {
+  const progress = loadProgress();
+  const current = progress[levelKey] ?? 0;
+  if (stars > current) {
+    progress[levelKey] = stars;
+    try { localStorage.setItem('lemmings_progress', JSON.stringify(progress)); } catch { /* ignore */ }
+  }
+}
+
 export class LevelSelectScene extends Phaser.Scene {
-  private readonly buttons: Button[] = [];
-  private backButton: Button | null = null;
-
-  private static readonly GRID_COLS = 5;
-  private static readonly CELL_W = 120;
-  private static readonly CELL_H = 90;
-  private static readonly CELL_GAP = 16;
-  private static readonly GRID_TOP = 130;
-
-  /** Hardcoded level catalogue — replace with LevelLoader data later */
-  private static readonly LEVELS: readonly Omit<LevelEntry, 'unlocked'>[] = [
-    { id: 1, name: 'The Gap',       difficulty: 1 },
-    { id: 2, name: 'High Walls',    difficulty: 1 },
-    { id: 3, name: 'Deep Valley',   difficulty: 2 },
-    { id: 4, name: 'The Gauntlet',  difficulty: 2 },
-    { id: 5, name: 'Final Push',    difficulty: 3 },
-  ];
-
   constructor() {
     super({ key: 'LevelSelectScene' });
   }
 
   create(): void {
-    this.createBackground();
-    this.createTitle();
-    this.createLevelGrid();
-    this.createBackButton();
+    const progress = loadProgress();
+
+    // Background
+    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0f172a).setDepth(0);
+
+    // Scrollable content area — we build everything in a container
+    const contentY = 8;
+
+    // Title bar
+    this.add.rectangle(GAME_WIDTH / 2, contentY + 20, GAME_WIDTH - 40, 36, 0x1e293b, 0.8)
+      .setDepth(1);
+    this.add.text(GAME_WIDTH / 2, contentY + 20, 'Niveaux', {
+      fontSize: '18px', color: '#e2e8f0', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(2);
+
+    // Layout: horizontal scrollable tiers
+    const tierStartY = contentY + 52;
+    const tierH = 80;
+    const tierGap = 6;
+
+    for (let t = 0; t < TIERS.length; t++) {
+      const tier = TIERS[t];
+      if (!tier) continue;
+      const rowY = tierStartY + t * (tierH + tierGap);
+
+      this.buildTierRow(t + 1, tier.name, tier.color, tier.lemmings, rowY, tierH, progress);
+    }
+
+    // Bottom: random button
+    const bottomY = tierStartY + TIERS.length * (tierH + tierGap) + 4;
+    this.buildRandomButton(bottomY);
   }
 
-  private createBackground(): void {
-    const bandH = Math.ceil(GAME_HEIGHT / 3);
-    this.add.rectangle(GAME_WIDTH / 2, bandH / 2,               GAME_WIDTH, bandH,     BG_COLOR_TOP).setDepth(0);
-    this.add.rectangle(GAME_WIDTH / 2, bandH + bandH / 2,        GAME_WIDTH, bandH,     BG_COLOR_MID).setDepth(0);
-    this.add.rectangle(GAME_WIDTH / 2, bandH * 2 + bandH / 2,   GAME_WIDTH, bandH + 1, BG_COLOR_BOTTOM).setDepth(0);
-  }
+  private buildTierRow(
+    tierNum: number, name: string, color: number, lemmings: number,
+    y: number, h: number, progress: Record<string, number>,
+  ): void {
+    const colorHex = `#${color.toString(16).padStart(6, '0')}`;
 
-  private createTitle(): void {
-    this.add
-      .text(GAME_WIDTH / 2, 50, 'SELECT LEVEL', {
-        fontSize: '36px',
-        color: '#00ff88',
-        fontFamily: 'Arial',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5)
-      .setDepth(10);
-  }
+    // Row background
+    const rowBg = this.add.graphics().setDepth(1);
+    rowBg.fillStyle(0x1e293b, 0.5);
+    rowBg.fillRoundedRect(16, y, GAME_WIDTH - 32, h, 10);
 
-  private createLevelGrid(): void {
-    const levels = this.buildLevelEntries();
-    const cols = LevelSelectScene.GRID_COLS;
-    const cw = LevelSelectScene.CELL_W;
-    const ch = LevelSelectScene.CELL_H;
-    const gap = LevelSelectScene.CELL_GAP;
-    const totalW = cols * cw + (cols - 1) * gap;
-    const startX = (GAME_WIDTH - totalW) / 2 + cw / 2;
-    const startY = LevelSelectScene.GRID_TOP + ch / 2;
+    // Tier label (left side)
+    const labelX = 30;
+    this.add.text(labelX, y + 16, name, {
+      fontSize: '14px', color: colorHex, fontFamily: 'Arial', fontStyle: 'bold',
+    }).setDepth(2);
 
-    for (let i = 0; i < levels.length; i++) {
-      const entry = levels[i];
-      if (entry === undefined) continue;
+    // Sub info
+    this.add.text(labelX, y + 36, `${lemmings} lemmings`, {
+      fontSize: '10px', color: '#64748b', fontFamily: 'Arial',
+    }).setDepth(2);
 
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const cx = startX + col * (cw + gap);
-      const cy = startY + row * (ch + gap);
+    // Total stars for this tier
+    let totalStars = 0;
+    const maxStars = LEVELS_PER_TIER * 3;
+    for (let lvl = 0; lvl < LEVELS_PER_TIER; lvl++) {
+      const seed = tierNum * 1000 + lvl;
+      totalStars += progress[`${tierNum}-${seed}`] ?? 0;
+    }
+    this.drawMiniStar(labelX + 4, y + 56, 5, true);
+    this.add.text(labelX + 14, y + 56, `${totalStars}/${maxStars}`, {
+      fontSize: '10px', color: '#94a3b8', fontFamily: 'Arial',
+    }).setOrigin(0, 0.5).setDepth(2);
 
-      this.createLevelCell(entry, cx, cy, cw, ch);
+    // Level cards (right side)
+    const cardsStartX = 120;
+    const cardW = 58;
+    const cardH = h - 12;
+    const cardGap = 8;
+
+    for (let lvl = 0; lvl < LEVELS_PER_TIER; lvl++) {
+      const cx = cardsStartX + lvl * (cardW + cardGap);
+      const cy = y + 6;
+      const seed = tierNum * 1000 + lvl;
+      const levelKey = `${tierNum}-${seed}`;
+      const stars = progress[levelKey] ?? 0;
+
+      this.buildCard(cx, cy, cardW, cardH, lvl + 1, stars, color, tierNum, seed);
     }
   }
 
-  private createLevelCell(entry: LevelEntry, cx: number, cy: number, cw: number, ch: number): void {
-    if (entry.unlocked) {
-      const btn = new Button(this, {
-        x: cx,
-        y: cy,
-        width: cw,
-        height: ch,
-        text: `${entry.id}`,
-        fontSize: 22,
-        bgColor: 0x1a3a5a,
-        hoverColor: 0x2a5a8a,
-        pressColor: 0x0a1a3a,
-        onClick: () => {
-          this.scene.start('GameScene', { levelId: entry.id });
-        },
-      });
-      this.buttons.push(btn);
+  private buildCard(
+    x: number, y: number, w: number, h: number,
+    num: number, stars: number, color: number, tier: number, seed: number,
+  ): void {
+    const g = this.add.graphics().setDepth(2);
+    const completed = stars > 0;
 
-      // Level name beneath the number
-      this.add
-        .text(cx, cy + 22, entry.name, {
-          fontSize: '11px',
-          color: '#aaaaaa',
-          fontFamily: 'Arial',
-        })
-        .setOrigin(0.5, 0)
-        .setDepth(20);
+    // Card body
+    g.fillStyle(completed ? 0x1e3a5f : 0x0f1729, 1);
+    g.fillRoundedRect(x, y, w, h, 6);
+    g.lineStyle(1.5, color, completed ? 0.7 : 0.25);
+    g.strokeRoundedRect(x, y, w, h, 6);
 
-      // Difficulty stars above the number
-      this.add
-        .text(cx, cy - 30, this.starsText(entry.difficulty), {
-          fontSize: '14px',
-          color: '#ffcc00',
-          fontFamily: 'Arial',
-        })
-        .setOrigin(0.5, 0)
-        .setDepth(20);
-    } else {
-      // Locked cell — drawn as a dimmed graphics panel, no button
-      const gfx = this.add.graphics().setDepth(15);
-      gfx.fillStyle(0x111111, 0.8);
-      gfx.fillRoundedRect(cx - cw / 2, cy - ch / 2, cw, ch, 8);
-      gfx.lineStyle(2, 0x333333, 1);
-      gfx.strokeRoundedRect(cx - cw / 2, cy - ch / 2, cw, ch, 8);
-
-      // Lock icon text substitute
-      this.add
-        .text(cx, cy - 8, 'LOCKED', {
-          fontSize: '13px',
-          color: '#555555',
-          fontFamily: 'Arial',
-          fontStyle: 'bold',
-        })
-        .setOrigin(0.5)
-        .setDepth(20);
-
-      this.add
-        .text(cx, cy + 14, `Level ${entry.id}`, {
-          fontSize: '11px',
-          color: '#444444',
-          fontFamily: 'Arial',
-        })
-        .setOrigin(0.5)
-        .setDepth(20);
+    // Completion accent line at top
+    if (completed) {
+      g.fillStyle(color, 0.4);
+      g.fillRect(x + 4, y + 2, w - 8, 2);
     }
+
+    // Level number
+    this.add.text(x + w / 2, y + h / 2 - 8, `${num}`, {
+      fontSize: '20px', color: completed ? '#ffffff' : '#94a3b8',
+      fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(3);
+
+    // 3 mini stars at bottom of card
+    const starY = y + h - 12;
+    const starGap = 12;
+    const starStartX = x + w / 2 - starGap;
+    for (let s = 0; s < 3; s++) {
+      this.drawMiniStar(starStartX + s * starGap, starY, 4, s < stars);
+    }
+
+    // Interactive
+    const zone = this.add.zone(x + w / 2, y + h / 2, w, h)
+      .setInteractive({ useHandCursor: true }).setDepth(4);
+
+    zone.on('pointerover', () => {
+      g.clear();
+      g.fillStyle(0x233a5a, 1);
+      g.fillRoundedRect(x, y, w, h, 6);
+      g.lineStyle(2, color, 0.9);
+      g.strokeRoundedRect(x, y, w, h, 6);
+    });
+
+    zone.on('pointerout', () => {
+      g.clear();
+      g.fillStyle(completed ? 0x1e3a5f : 0x0f1729, 1);
+      g.fillRoundedRect(x, y, w, h, 6);
+      g.lineStyle(1.5, color, completed ? 0.7 : 0.25);
+      g.strokeRoundedRect(x, y, w, h, 6);
+      if (completed) {
+        g.fillStyle(color, 0.4);
+        g.fillRect(x + 4, y + 2, w - 8, 2);
+      }
+    });
+
+    zone.on('pointerdown', () => { this.launchLevel(tier, seed); });
   }
 
-  private createBackButton(): void {
-    this.backButton = new Button(this, {
-      x: 70,
-      y: GAME_HEIGHT - 36,
-      width: 120,
-      height: 48,
-      text: 'Back',
-      fontSize: 16,
-      bgColor: 0x333333,
-      hoverColor: 0x555555,
-      pressColor: 0x222222,
-      onClick: () => {
-        this.scene.start('MenuScene');
-      },
+  private drawMiniStar(cx: number, cy: number, r: number, filled: boolean): void {
+    const g = this.add.graphics().setDepth(3);
+    const innerR = r * 0.4;
+    const pts: { x: number; y: number }[] = [];
+    for (let i = 0; i < 10; i++) {
+      const angle = (i * Math.PI) / 5 - Math.PI / 2;
+      const radius = i % 2 === 0 ? r : innerR;
+      pts.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+    }
+    g.fillStyle(filled ? 0xfbbf24 : 0x334155, 1);
+    g.fillPoints(pts, true);
+  }
+
+  private buildRandomButton(y: number): void {
+    const bw = 200;
+    const bh = 36;
+    const bx = GAME_WIDTH / 2 - bw / 2;
+
+    const g = this.add.graphics().setDepth(1);
+    g.fillStyle(0x1e293b, 1);
+    g.fillRoundedRect(bx, y, bw, bh, 8);
+    g.lineStyle(1.5, 0x3b82f6, 0.6);
+    g.strokeRoundedRect(bx, y, bw, bh, 8);
+
+    this.add.text(GAME_WIDTH / 2, y + bh / 2, 'Niveau aleatoire', {
+      fontSize: '13px', color: '#60a5fa', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(2);
+
+    const zone = this.add.zone(GAME_WIDTH / 2, y + bh / 2, bw, bh)
+      .setInteractive({ useHandCursor: true }).setDepth(3);
+
+    zone.on('pointerdown', () => {
+      this.launchLevel(Phaser.Math.Between(1, 5), Date.now());
     });
   }
 
-  /** Build level entries with unlock state from localStorage */
-  private buildLevelEntries(): LevelEntry[] {
-    return LevelSelectScene.LEVELS.map((lvl, idx) => {
-      const unlocked = idx === 0 || this.isLevelComplete(idx); // level N unlocked if level N-1 done
-      return { ...lvl, unlocked };
-    });
-  }
+  private launchLevel(tier: number, seed: number): void {
+    const config = DIFFICULTY_PRESETS[tier - 1];
+    if (!config) return;
 
-  /**
-   * Check localStorage for level completion flag.
-   * Key format: "lemmings_level_<id>_done"
-   */
-  private isLevelComplete(levelIndex: number): boolean {
-    const prevLevel = LevelSelectScene.LEVELS[levelIndex - 1];
-    if (prevLevel === undefined) return false;
-    try {
-      return localStorage.getItem(`lemmings_level_${prevLevel.id}_done`) === 'true';
-    } catch {
-      // localStorage may be unavailable (private browsing, etc.)
-      return false;
-    }
-  }
+    const generator = new LevelGenerator();
+    const validator = new LevelValidator();
 
-  private starsText(difficulty: 1 | 2 | 3): string {
-    return '*'.repeat(difficulty) + ' '.repeat(3 - difficulty);
-  }
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const levelData = generator.generate(config, seed + attempt);
+      const result = validator.validate(levelData);
+      if (result.solvable) {
+        this.scene.start('GameScene', { levelData });
+        return;
+      }
+    }
 
-  shutdown(): void {
-    for (const btn of this.buttons) {
-      btn.destroy();
-    }
-    this.buttons.length = 0;
-    if (this.backButton !== null) {
-      this.backButton.destroy();
-      this.backButton = null;
-    }
+    const fallback = generator.generate(DIFFICULTY_PRESETS[0] as DifficultyConfig, 42);
+    this.scene.start('GameScene', { levelData: fallback });
   }
 }
