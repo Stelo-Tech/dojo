@@ -86,8 +86,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.createBackground();
-    this.createMountains();
-    this.createClouds();
+    this.createParallaxLayers();
     this.createStars();
 
     // Build terrain from level data
@@ -307,6 +306,43 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private createParallaxLayers(): void {
+    // Mountain silhouette (far layer)
+    const mtn = this.add.graphics().setDepth(1).setAlpha(0.3);
+    this.mountainLayer = mtn;
+    const skyBottom = TERRAIN_Y - 40;
+    mtn.fillStyle(0x1a2040, 1);
+    let seed = 7777;
+    const nextRand = (): number => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    let mx = 0;
+    mtn.beginPath();
+    mtn.moveTo(0, skyBottom);
+    while (mx < GAME_WIDTH) {
+      const peakH = 30 + nextRand() * 60;
+      const segW = 40 + nextRand() * 80;
+      mtn.lineTo(mx + segW / 2, skyBottom - peakH);
+      mtn.lineTo(mx + segW, skyBottom);
+      mx += segW;
+    }
+    mtn.lineTo(GAME_WIDTH, skyBottom);
+    mtn.closePath();
+    mtn.fillPath();
+
+    // Clouds (mid layer)
+    const cg = this.add.graphics().setDepth(2).setAlpha(0.2);
+    this.cloudGraphics = cg;
+    for (let i = 0; i < 5; i++) {
+      const cx = nextRand() * GAME_WIDTH;
+      const cy = 30 + nextRand() * (skyBottom * 0.4);
+      const w = 40 + nextRand() * 60;
+      const h = 12 + nextRand() * 15;
+      cg.fillStyle(0xffffff, 0.3 + nextRand() * 0.3);
+      cg.fillEllipse(cx, cy, w, h);
+      cg.fillEllipse(cx + w * 0.3, cy - h * 0.2, w * 0.6, h * 0.7);
+      this.clouds.push({ x: cx, y: cy, wMult: w, hMult: h, alpha: 0.3, speed: 3 + nextRand() * 5 });
+    }
+  }
+
   private createBackground(): void {
     const g = this.add.graphics().setDepth(0);
     this.bgGraphics = g;
@@ -520,6 +556,10 @@ export class GameScene extends Phaser.Scene {
     if (this.spawnPortal) { this.spawnPortal.destroy(); this.spawnPortal = null; }
     if (this.spawnLabel) { this.spawnLabel.destroy(); this.spawnLabel = null; }
     if (this.bgGraphics) { this.bgGraphics.destroy(); this.bgGraphics = null; }
+    if (this.mountainLayer) { this.mountainLayer.destroy(); this.mountainLayer = null; }
+    if (this.cloudGraphics) { this.cloudGraphics.destroy(); this.cloudGraphics = null; }
+    if (this.vignette) { this.vignette.destroy(); this.vignette = null; }
+    if (this.levelFlash) { this.levelFlash.destroy(); this.levelFlash = null; }
     for (const star of this.starGraphics) { star.destroy(); }
     this.starGraphics.length = 0;
   }
