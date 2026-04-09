@@ -3,3 +3,4 @@ dist
 .cache
 *.local
 coverage
+.claude/worktrees/
