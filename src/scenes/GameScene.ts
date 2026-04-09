@@ -16,6 +16,7 @@ import { LemmingPool } from '@/entities/LemmingPool';
 import { SpawnSystem } from '@/systems/SpawnSystem';
 import { PhysicsSystem } from '@/systems/PhysicsSystem';
 import { TerrainSystem } from '@/systems/TerrainSystem';
+import { ParticleSystem } from '@/systems/ParticleSystem';
 import { HUD } from '@/ui/HUD';
 import { TouchControls } from '@/ui/TouchControls';
 import { LevelData, DifficultyConfig } from '@/levels/LevelData';
@@ -28,6 +29,7 @@ export class GameScene extends Phaser.Scene {
   private spawnSystem: SpawnSystem | null = null;
   private physicsSystem: PhysicsSystem | null = null;
   private terrainSystem: TerrainSystem | null = null;
+  private particleSystem: ParticleSystem | null = null;
   private hud: HUD | null = null;
   private touchControls: TouchControls | null = null;
   private exitZone: Phaser.GameObjects.Graphics | null = null;
@@ -47,9 +49,20 @@ export class GameScene extends Phaser.Scene {
   private endDelay = 0;
 
   private bgGraphics: Phaser.GameObjects.Graphics | null = null;
+  private mountainLayer: Phaser.GameObjects.Graphics | null = null;
+  private cloudGraphics: Phaser.GameObjects.Graphics | null = null;
   private readonly starGraphics: Phaser.GameObjects.Arc[] = [];
   private spawnPortal: Phaser.GameObjects.Graphics | null = null;
   private spawnLabel: Phaser.GameObjects.Text | null = null;
+
+  // Screen effects
+  private vignette: Phaser.GameObjects.Graphics | null = null;
+  private levelFlash: Phaser.GameObjects.Rectangle | null = null;
+  private shakeActive = false;
+  private shakeElapsed = 0;
+
+  // Parallax clouds
+  private readonly clouds: Array<{ x: number; y: number; wMult: number; hMult: number; alpha: number; speed: number }> = [];
 
   constructor() {
     super({ key: 'GameScene' });
@@ -61,6 +74,9 @@ export class GameScene extends Phaser.Scene {
     this.elapsedTime = 0;
     this.levelEnded = false;
     this.endDelay = 0;
+    this.shakeActive = false;
+    this.shakeElapsed = 0;
+    this.clouds.length = 0;
 
     // Get or generate level data
     if (data?.levelData) {
@@ -70,6 +86,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.createBackground();
+    this.createMountains();
+    this.createClouds();
     this.createStars();
 
     // Build terrain from level data
@@ -89,12 +107,19 @@ export class GameScene extends Phaser.Scene {
       spawnInterval: this.levelData.spawnInterval,
     });
     this.physicsSystem = new PhysicsSystem(this.lemmingPool, this.terrainSystem);
+    this.particleSystem = new ParticleSystem(this);
 
     this.hud = new HUD(this, this.levelData.toolBudget);
     this.touchControls = new TouchControls(this, this.hud, this.terrainSystem, this.lemmingPool, this.levelData.exit);
 
-    this.diedHandler = (_data: { id: number; cause: string }) => {
+    this.diedHandler = (data: { id: number; cause: string }) => {
       this.deadCount++;
+      // Death poof particles — find lemming position
+      const active = this.lemmingPool?.getActive() ?? [];
+      const lem = active.find(l => l.id === data.id);
+      if (lem && this.particleSystem) {
+        this.particleSystem.emitDeathPoof(lem.x, lem.y);
+      }
     };
     gameEventBus.on('lemming:died', this.diedHandler);
 
@@ -102,6 +127,9 @@ export class GameScene extends Phaser.Scene {
     this.diggerHandler = (data: { id: number; x: number; y: number }) => {
       if (this.terrainSystem) {
         this.terrainSystem.eraseRect(data.x - 6, data.y, 12, 4);
+      }
+      if (this.particleSystem) {
+        this.particleSystem.emitDigParticles(data.x, data.y);
       }
     };
     gameEventBus.on('digger:dig', this.diggerHandler);
@@ -127,6 +155,9 @@ export class GameScene extends Phaser.Scene {
         const bx = data.direction === 1 ? data.x : data.x - 6;
         this.terrainSystem.buildStep(bx, data.y, 6, 2);
       }
+      if (this.particleSystem) {
+        this.particleSystem.emitBuildParticles(data.x, data.y);
+      }
     };
     gameEventBus.on('builder:build', this.builderHandler);
 
@@ -134,8 +165,25 @@ export class GameScene extends Phaser.Scene {
       if (this.terrainSystem) {
         this.terrainSystem.eraseRect(data.x - 15, data.y - 15, 30, 30);
       }
+      if (this.particleSystem) {
+        this.particleSystem.emitExplosion(data.x, data.y);
+      }
+      this.shakeActive = true;
+      this.shakeElapsed = 0;
     };
     gameEventBus.on('bomber:explode', this.bomberHandler);
+
+    // Saved celebration particles (hooked directly, no separate savedHandler field needed)
+    gameEventBus.on('lemming:saved', (data: { id: number }) => {
+      const active = this.lemmingPool?.getActive() ?? [];
+      const lem = active.find(l => l.id === data.id);
+      if (lem && this.particleSystem) {
+        this.particleSystem.emitSaveEffect(lem.x, lem.y);
+      }
+    });
+
+    this.createVignette();
+    this.createLevelFlash();
 
     // Register cleanup on Phaser scene lifecycle events
     this.events.once('shutdown', this.cleanUp, this);
@@ -176,6 +224,12 @@ export class GameScene extends Phaser.Scene {
     if (this.physicsSystem) {
       this.physicsSystem.update(dt);
     }
+    if (this.particleSystem) {
+      this.particleSystem.update(dt);
+    }
+
+    this.updateParallaxClouds(dt);
+    this.updateScreenShake(dt);
 
     if (this.lemmingPool && this.levelData) {
       const active = this.lemmingPool.getActive();
