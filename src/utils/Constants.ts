@@ -150,3 +150,43 @@ export const SPAWN_PORTAL_COLOR = 0x4488ff;
 
 /** Exit pulse speed (radians per second) */
 export const EXIT_PULSE_SPEED = 4;
+
+/** Save system */
+export const SAVE_AUTO_SAVE_INTERVAL_MS = 30_000;
+export const SAVE_MAX_STARS_PER_LEVEL = 3;
+export const STAR_THRESHOLD_GOLD = 1.0; // 100% saved -> 3 stars
+export const STAR_THRESHOLD_SILVER = 0.75; // 75%+ saved -> 2 stars
+
+// ---------------------------------------------------------------------------
+// Audio
+// ---------------------------------------------------------------------------
+
+/** Audio categories for volume grouping */
+export type AudioCategory = 'sfx' | 'music' | 'ui';
+
+/** Default volumes per category (0–1) */
+export const AUDIO_VOLUMES: Readonly<Record<AudioCategory, number>> = {
+  sfx: 0.7,
+  music: 0.4,
+  ui: 0.6,
+};
+
+/** Audio asset keys — all sound identifiers used across the game */
+export const AUDIO_KEYS = {
+  // SFX — gameplay actions
+  SFX_ASSIGN_SKILL: 'sfx_assign_skill',
+  SFX_DIG: 'sfx_dig',
+  SFX_BUILD: 'sfx_build',
+  SFX_BLOCK: 'sfx_block',
+  SFX_EXPLODE: 'sfx_explode',
+  SFX_SAVE: 'sfx_save',
+  SFX_DEATH: 'sfx_death',
+  SFX_SPLAT: 'sfx_splat',
+  // UI — menus and feedback
+  UI_CLICK: 'ui_click',
+  UI_LEVEL_COMPLETE: 'ui_level_complete',
+  UI_LEVEL_FAIL: 'ui_level_fail',
+  // Music — background tracks
+  MUSIC_MENU: 'music_menu',
+  MUSIC_GAMEPLAY: 'music_gameplay',
+} as const;

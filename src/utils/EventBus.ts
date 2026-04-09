@@ -60,6 +60,7 @@ export type GameEvents = {
   'tool:counts': { dig: number; stairs: number; wall: number; ramp: number };
   'hud:update': { alive: number; saved: number; dead: number };
   'level:complete': { saved: number; total: number };
+  'level:failed': { saved: number; total: number };
   'level:allSpawned': Record<string, never>;
   'level:start': { levelId: string };
   'level:pause': undefined;
