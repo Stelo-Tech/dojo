@@ -38,6 +38,8 @@ export class GameScene extends Phaser.Scene {
   private diedHandler: ((data: { id: number; cause: string }) => void) | null = null;
   private elapsedTime = 0;
   private levelData: LevelData | null = null;
+  private levelEnded = false;
+  private endDelay = 0;
 
   private bgGraphics: Phaser.GameObjects.Graphics | null = null;
   private readonly starGraphics: Phaser.GameObjects.Arc[] = [];
@@ -148,6 +150,29 @@ export class GameScene extends Phaser.Scene {
         saved: this.savedCount,
         dead: this.deadCount,
       });
+
+      // End-of-level detection: all spawned and none alive
+      if (!this.levelEnded && this.spawnSystem && this.levelData) {
+        const allSpawned = this.spawnSystem.getSpawnedCount() >= this.levelData.lemmingCount;
+        if (allSpawned && alive === 0) {
+          this.endDelay += dt;
+          // Small delay so player sees the last lemming exit/die
+          if (this.endDelay >= 1.0) {
+            this.levelEnded = true;
+            const won = this.savedCount >= this.levelData.requiredSaves;
+            this.scene.start('ResultScene', {
+              saved: this.savedCount,
+              dead: this.deadCount,
+              total: this.levelData.lemmingCount,
+              required: this.levelData.requiredSaves,
+              levelName: this.levelData.name,
+              tier: this.levelData.tier,
+              won,
+              levelData: this.levelData,
+            });
+          }
+        }
+      }
     }
   }
 
