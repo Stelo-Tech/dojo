@@ -24,6 +24,13 @@ const NO_GROUND = 9999;
 /**
  * Validates that a generated level is solvable by simulating a walker
  * with optimal tool usage. Pure logic — no Phaser dependency.
+ *
+ * Extended to handle new obstacle types:
+ *   - water_zone / lava_zone: treated as gaps (require stairs to bridge)
+ *   - crusher_zone: low ceiling block — walker can pass beneath (no tool needed)
+ *   - multi_platform / crumbling_platform / elevated_platform: treated as
+ *     elevated terrain requiring ramp to climb
+ *   - narrow_tunnel: passable without tools (ceiling above head height)
  */
 export class LevelValidator {
   validate(level: LevelData): ValidationResult {
@@ -62,7 +69,7 @@ export class LevelValidator {
 
       const nextGroundY = groundY[nextX];
 
-      // Case 1: No ground ahead — gap
+      // Case 1: No ground ahead — gap (includes water_zone, lava_zone, pit)
       if (nextGroundY === undefined || nextGroundY === NO_GROUND) {
         // Find gap extent
         const gapStart = nextX;
@@ -75,14 +82,16 @@ export class LevelValidator {
         // Try stairs
         const stairSpan = TOOL_STAIR_STEPS * TOOL_STAIR_STEP_W;
         if (gapWidth <= stairSpan && toolsUsed.stairs < level.toolBudget.stairs) {
-          // Place virtual stairs across gap
           toolsUsed.stairs++;
           for (let col = gapStart; col < gapEnd && col < GAME_WIDTH; col++) {
             const stepIdx = Math.floor((col - gapStart) / TOOL_STAIR_STEP_W);
             const stepY = y - (stepIdx + 1) * TOOL_STAIR_STEP_H;
-            groundY[col] = Math.min(groundY[col] ?? NO_GROUND, stepY);
+            const cur = groundY[col];
+            groundY[col] = cur === undefined || cur === NO_GROUND ? stepY : Math.min(cur, stepY);
           }
-          // Continue walking — ground is now filled
+          // Advance x so we don't re-check the gap entrance
+          x = nextX;
+          y = groundY[nextX] ?? y;
           continue;
         }
 
@@ -96,26 +105,17 @@ export class LevelValidator {
       }
 
       // Case 2: Ground ahead — check elevation difference
-      const dy = y - (nextGroundY ?? y);  // positive = next is higher (wall/step)
+      const dy = y - nextGroundY;  // positive = next is higher (wall/step), negative = drop
 
-      if (dy < -STEP_CLIMB_MAX) {
-        // Dropping down — check if it's a fatal fall
-        // Just walk down (lemmings can handle non-fatal drops)
+      if (dy <= STEP_CLIMB_MAX && dy >= -(GAME_WIDTH)) {
+        // Small step or drop — auto-navigate
         x = nextX;
-        y = nextGroundY ?? y;
+        y = nextGroundY;
         continue;
       }
 
-      if (dy >= -STEP_CLIMB_MAX && dy <= STEP_CLIMB_MAX) {
-        // Small step — auto-climb
-        x = nextX;
-        y = nextGroundY ?? y;
-        continue;
-      }
-
-      // Wall ahead — elevation too high to climb
+      // Wall ahead — elevation too high to auto-climb
       if (dy > STEP_CLIMB_MAX) {
-        // Measure wall height
         const wallHeight = dy;
 
         // Try ramp (if wall isn't too tall)
@@ -128,25 +128,29 @@ export class LevelValidator {
             if (rx < 0 || rx >= GAME_WIDTH) break;
             const progress = (col + 1) / TOOL_RAMP_LENGTH;
             const rampY = y - Math.floor(TOOL_RAMP_HEIGHT * progress);
-            groundY[rx] = Math.min(groundY[rx] ?? NO_GROUND, rampY);
+            const cur = groundY[rx];
+            groundY[rx] = cur === undefined || cur === NO_GROUND ? rampY : Math.min(cur, rampY);
           }
+          // Advance past wall to avoid infinite loop
+          x = nextX;
+          y = nextGroundY;
           continue;
         }
 
         // Try dig (punch through wall)
         if (toolsUsed.dig < level.toolBudget.dig) {
           toolsUsed.dig++;
-          // Erase wall columns ahead
+          // Erase wall columns ahead: reset them to current walker y (dig level)
           const digStart = direction === 1 ? nextX : nextX - TOOL_DIG_WIDTH;
           for (let col = digStart; col < digStart + TOOL_DIG_WIDTH && col < GAME_WIDTH; col++) {
             if (col >= 0) {
-              const current = groundY[col];
-              if (current !== undefined && current !== NO_GROUND && current < y) {
-                // Reset to terrain level (dig through the wall)
-                groundY[col] = y;
-              }
+              // Set wall to walker y so it becomes walkable flat ground
+              groundY[col] = y;
             }
           }
+          // Advance x so the walker enters the newly dug passage
+          x = nextX;
+          y = groundY[nextX] ?? y;
           continue;
         }
 
@@ -161,7 +165,7 @@ export class LevelValidator {
 
       // Default: advance
       x = nextX;
-      y = nextGroundY ?? y;
+      y = nextGroundY;
     }
 
     return { solvable: false, reason: 'exceeded max steps', toolsUsed };

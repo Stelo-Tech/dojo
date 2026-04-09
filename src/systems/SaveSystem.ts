@@ -13,10 +13,12 @@ import { gameEventBus } from '@/utils/EventBus';
 import {
   type GameSave,
   type LevelProgress,
+  type DailyChallengeData,
   SAVE_VERSION,
   SAVE_KEY,
   AUTO_SAVE_INTERVAL_MS,
   createDefaultSave,
+  betterRank,
 } from '@/systems/SaveTypes';
 
 const IDB_NAME = 'lemmings_db';
@@ -111,6 +113,8 @@ export class SaveSystem {
     saved: number,
     total: number,
     time: number,
+    score: number = 0,
+    rank: 'S' | 'A' | 'B' | 'C' | 'F' = 'F',
   ): void {
     const completed = saved > 0;
     const stars = this.calculateStars(saved, total);
@@ -126,6 +130,8 @@ export class SaveSystem {
     const bestStars = existing ? Math.max(existing.stars, stars) : stars;
     const wasCompleted = existing ? existing.completed : false;
     const attempts = existing ? existing.attempts + 1 : 1;
+    const bestScore = existing ? Math.max(existing.bestScore, score) : score;
+    const bestRank = existing ? betterRank(existing.bestRank, rank) : rank;
 
     const progress: LevelProgress = {
       completed: wasCompleted || completed,
@@ -133,6 +139,8 @@ export class SaveSystem {
       bestSaved,
       bestTime,
       attempts,
+      bestScore,
+      bestRank,
     };
 
     // Levels record is readonly at the type level — build a new one.
@@ -203,6 +211,34 @@ export class SaveSystem {
   /** Get a snapshot of the current save data. */
   getData(): GameSave {
     return this.data;
+  }
+
+  /** Add an achievement ID to the unlocked list. Returns true if newly unlocked. */
+  unlockAchievement(id: string): boolean {
+    if (this.data.achievements.includes(id)) return false;
+    this.data = {
+      ...this.data,
+      achievements: [...this.data.achievements, id],
+    };
+    return true;
+  }
+
+  /** Get all unlocked achievement IDs. */
+  getUnlockedAchievements(): readonly string[] {
+    return this.data.achievements;
+  }
+
+  /** Get the daily challenge data. */
+  getDailyChallenge(): DailyChallengeData {
+    return this.data.dailyChallenge;
+  }
+
+  /** Update daily challenge data. */
+  updateDailyChallenge(challenge: DailyChallengeData): void {
+    this.data = {
+      ...this.data,
+      dailyChallenge: challenge,
+    };
   }
 
   /** Reset all progress back to defaults. */
@@ -328,10 +364,33 @@ export class SaveSystem {
   private migrate(data: GameSave): GameSave {
     let current: GameSave = { ...data };
 
-    // Example: when SAVE_VERSION becomes 2, add:
-    // if (current.version === 1) {
-    //   current = { ...current, version: 2, newField: defaultValue };
-    // }
+    if (current.version === 1) {
+      // v1 -> v2: add achievements, dailyChallenge, and level bestScore/bestRank
+      const migratedLevels: Record<number, LevelProgress> = {};
+      const keys = Object.keys(current.levels);
+      for (let i = 0; i < keys.length; i++) {
+        const key = Number(keys[i]);
+        const lp = current.levels[key];
+        if (lp) {
+          migratedLevels[key] = {
+            ...lp,
+            bestScore: (lp as Record<string, unknown>)['bestScore'] as number ?? 0,
+            bestRank: (lp as Record<string, unknown>)['bestRank'] as 'S' | 'A' | 'B' | 'C' | 'F' ?? 'F',
+          };
+        }
+      }
+      current = {
+        ...current,
+        version: 2,
+        levels: migratedLevels,
+        achievements: (current as Record<string, unknown>)['achievements'] as readonly string[] ?? [],
+        dailyChallenge: (current as Record<string, unknown>)['dailyChallenge'] as DailyChallengeData ?? {
+          lastCompleted: '',
+          streak: 0,
+          bestScore: 0,
+        },
+      };
+    }
 
     // Ensure we end up at the current version
     current = { ...current, version: SAVE_VERSION };

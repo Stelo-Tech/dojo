@@ -1,10 +1,12 @@
 import Phaser from 'phaser';
 import { HUD } from '@/ui/HUD';
 import { TerrainSystem } from '@/systems/TerrainSystem';
+import { LemmingPool } from '@/entities/LemmingPool';
 import { gameEventBus } from '@/utils/EventBus';
 import {
   GAME_WIDTH,
   ToolType,
+  SkillType,
   TOOL_STAIR_STEPS,
   TOOL_STAIR_STEP_W,
   TOOL_STAIR_STEP_H,
@@ -16,6 +18,7 @@ import {
   TOOL_RAMP_HEIGHT,
   WALL_TERRAIN_COLOR,
   HUD_BAR_Y,
+  SKILL_SELECT_RADIUS,
 } from '@/utils/Constants';
 
 /** Exit zone coordinates for protection */
@@ -30,6 +33,7 @@ export class TouchControls {
   private readonly scene: Phaser.Scene;
   private readonly hud: HUD;
   private readonly terrain: TerrainSystem;
+  private readonly lemmingPool: LemmingPool;
   private readonly exitRect: ExitZoneRect;
   private readonly flashPool: Phaser.GameObjects.Rectangle[] = [];
   private readonly onPointerDownBound: (pointer: Phaser.Input.Pointer) => void;
@@ -44,11 +48,18 @@ export class TouchControls {
   /** Preview ghost graphics */
   private preview: Phaser.GameObjects.Graphics;
 
-  constructor(scene: Phaser.Scene, hud: HUD, terrain: TerrainSystem, exitRect?: ExitZoneRect) {
+  constructor(
+    scene: Phaser.Scene,
+    hud: HUD,
+    terrain: TerrainSystem,
+    lemmingPool: LemmingPool,
+    exitRect?: ExitZoneRect,
+  ) {
     this.exitRect = exitRect ?? { x: 850, y: 370, width: 30, height: 30 };
     this.scene = scene;
     this.hud = hud;
     this.terrain = terrain;
+    this.lemmingPool = lemmingPool;
 
     for (let i = 0; i < 4; i++) {
       const flash = scene.add.rectangle(0, 0, 10, 10, 0xffffff, 0.6);
@@ -147,7 +158,6 @@ export class TouchControls {
       case 'dig':
         g.lineStyle(2, 0xff6644, 0.7);
         g.strokeRect(worldX - TOOL_DIG_WIDTH / 2, worldY, TOOL_DIG_WIDTH, TOOL_DIG_DEPTH);
-        // Cross lines to indicate destruction
         g.lineBetween(worldX - TOOL_DIG_WIDTH / 2, worldY, worldX + TOOL_DIG_WIDTH / 2, worldY + TOOL_DIG_DEPTH);
         g.lineBetween(worldX + TOOL_DIG_WIDTH / 2, worldY, worldX - TOOL_DIG_WIDTH / 2, worldY + TOOL_DIG_DEPTH);
         break;
@@ -192,6 +202,13 @@ export class TouchControls {
     if (this.isInHudBar(worldY)) return;
     if (this.isInExitZone(worldX, worldY)) return;
 
+    // Check if a skill is selected (takes priority over tools)
+    const selectedSkill = this.hud.getSelectedSkill();
+    if (selectedSkill !== null) {
+      this.tryAssignSkill(selectedSkill, worldX, worldY);
+      return;
+    }
+
     const selectedTool = this.hud.getSelectedTool();
     if (selectedTool === null) return;
 
@@ -201,6 +218,50 @@ export class TouchControls {
     this.placeTool(selectedTool, worldX, worldY);
     gameEventBus.emit('tool:placed', { tool: selectedTool, x: worldX, y: worldY });
     this.showPlacementFlash(worldX, worldY);
+  }
+
+  /** Find nearest alive lemming within SKILL_SELECT_RADIUS and assign the skill. */
+  private tryAssignSkill(skill: SkillType, worldX: number, worldY: number): void {
+    const active = this.lemmingPool.getActive();
+    let closestDist = SKILL_SELECT_RADIUS + 1;
+    let closestIdx = -1;
+
+    for (let i = 0; i < active.length; i++) {
+      const lemming = active[i];
+      if (!lemming || !lemming.alive) continue;
+
+      const dx = lemming.x - worldX;
+      const dy = lemming.y - worldY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestIdx = i;
+      }
+    }
+
+    if (closestIdx < 0) return;
+
+    const target = active[closestIdx];
+    if (!target) return;
+
+    // Check skill budget
+    const consumed = this.hud.consumeSkill(skill);
+    if (!consumed) return;
+
+    // Climber and floater are persistent traits, not immediate state changes
+    if (skill === 'climber') {
+      target.isClimber = true;
+    } else if (skill === 'floater') {
+      target.isFloater = true;
+    } else {
+      target.changeState(skill);
+    }
+
+    // Visual feedback
+    target.flashSelection();
+
+    gameEventBus.emit('skill:assigned', { lemmingId: target.id, skill });
+    this.showPlacementFlash(target.x, target.y);
   }
 
   private placeTool(tool: ToolType, worldX: number, worldY: number): void {

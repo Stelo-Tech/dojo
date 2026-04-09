@@ -36,6 +36,11 @@ export class GameScene extends Phaser.Scene {
   private savedCount = 0;
   private deadCount = 0;
   private diedHandler: ((data: { id: number; cause: string }) => void) | null = null;
+  private diggerHandler: ((data: { id: number; x: number; y: number }) => void) | null = null;
+  private basherHandler: ((data: { id: number; x: number; y: number; direction: 1 | -1 }) => void) | null = null;
+  private minerHandler: ((data: { id: number; x: number; y: number; direction: 1 | -1 }) => void) | null = null;
+  private builderHandler: ((data: { id: number; x: number; y: number; direction: 1 | -1 }) => void) | null = null;
+  private bomberHandler: ((data: { id: number; x: number; y: number }) => void) | null = null;
   private elapsedTime = 0;
   private levelData: LevelData | null = null;
   private levelEnded = false;
@@ -86,12 +91,51 @@ export class GameScene extends Phaser.Scene {
     this.physicsSystem = new PhysicsSystem(this.lemmingPool, this.terrainSystem);
 
     this.hud = new HUD(this, this.levelData.toolBudget);
-    this.touchControls = new TouchControls(this, this.hud, this.terrainSystem, this.levelData.exit);
+    this.touchControls = new TouchControls(this, this.hud, this.terrainSystem, this.lemmingPool, this.levelData.exit);
 
     this.diedHandler = (_data: { id: number; cause: string }) => {
       this.deadCount++;
     };
     gameEventBus.on('lemming:died', this.diedHandler);
+
+    // Skill event listeners: connect lemming skill actions to terrain modifications
+    this.diggerHandler = (data: { id: number; x: number; y: number }) => {
+      if (this.terrainSystem) {
+        this.terrainSystem.eraseRect(data.x - 6, data.y, 12, 4);
+      }
+    };
+    gameEventBus.on('digger:dig', this.diggerHandler);
+
+    this.basherHandler = (data: { id: number; x: number; y: number; direction: 1 | -1 }) => {
+      if (this.terrainSystem) {
+        const bx = data.direction === 1 ? data.x : data.x - 12;
+        this.terrainSystem.eraseRect(bx, data.y - 8, 12, 16);
+      }
+    };
+    gameEventBus.on('basher:dig', this.basherHandler);
+
+    this.minerHandler = (data: { id: number; x: number; y: number; direction: 1 | -1 }) => {
+      if (this.terrainSystem) {
+        const mx = data.direction === 1 ? data.x : data.x - 10;
+        this.terrainSystem.eraseRect(mx, data.y - 4, 10, 8);
+      }
+    };
+    gameEventBus.on('miner:dig', this.minerHandler);
+
+    this.builderHandler = (data: { id: number; x: number; y: number; direction: 1 | -1 }) => {
+      if (this.terrainSystem) {
+        const bx = data.direction === 1 ? data.x : data.x - 6;
+        this.terrainSystem.buildStep(bx, data.y, 6, 2);
+      }
+    };
+    gameEventBus.on('builder:build', this.builderHandler);
+
+    this.bomberHandler = (data: { id: number; x: number; y: number }) => {
+      if (this.terrainSystem) {
+        this.terrainSystem.eraseRect(data.x - 15, data.y - 15, 30, 30);
+      }
+    };
+    gameEventBus.on('bomber:explode', this.bomberHandler);
 
     // Register cleanup on Phaser scene lifecycle events
     this.events.once('shutdown', this.cleanUp, this);
@@ -166,6 +210,30 @@ export class GameScene extends Phaser.Scene {
           if (this.endDelay >= 1.0) {
             this.levelEnded = true;
             const won = this.savedCount >= this.levelData.requiredSaves;
+            // Build skills used/available maps from tool budget
+            const skillsAvailable: Record<string, number> = {};
+            const toolBudget = this.levelData.toolBudget;
+            const toolKeys = Object.keys(toolBudget);
+            for (let ti = 0; ti < toolKeys.length; ti++) {
+              const tk = toolKeys[ti];
+              if (tk) {
+                skillsAvailable[tk] = toolBudget[tk as keyof typeof toolBudget] ?? 0;
+              }
+            }
+            // Gather used tools from HUD if available
+            const skillsUsed: Record<string, number> = {};
+            if (this.hud) {
+              const remaining = this.hud.getToolCounts();
+              const rKeys = Object.keys(remaining);
+              for (let ri = 0; ri < rKeys.length; ri++) {
+                const rk = rKeys[ri];
+                if (rk) {
+                  const avail = skillsAvailable[rk] ?? 0;
+                  const rem = remaining[rk as keyof typeof remaining] ?? 0;
+                  skillsUsed[rk] = Math.max(0, avail - rem);
+                }
+              }
+            }
             this.scene.start('ResultScene', {
               saved: this.savedCount,
               dead: this.deadCount,
@@ -175,6 +243,9 @@ export class GameScene extends Phaser.Scene {
               tier: this.levelData.tier,
               won,
               levelData: this.levelData,
+              timeElapsed: this.elapsedTime,
+              skillsUsed,
+              skillsAvailable,
             });
           }
         }
@@ -378,6 +449,11 @@ export class GameScene extends Phaser.Scene {
     // tween callbacks firing on destroyed game objects
     this.tweens.killAll();
     if (this.diedHandler) { gameEventBus.off('lemming:died', this.diedHandler); this.diedHandler = null; }
+    if (this.diggerHandler) { gameEventBus.off('digger:dig', this.diggerHandler); this.diggerHandler = null; }
+    if (this.basherHandler) { gameEventBus.off('basher:dig', this.basherHandler); this.basherHandler = null; }
+    if (this.minerHandler) { gameEventBus.off('miner:dig', this.minerHandler); this.minerHandler = null; }
+    if (this.builderHandler) { gameEventBus.off('builder:build', this.builderHandler); this.builderHandler = null; }
+    if (this.bomberHandler) { gameEventBus.off('bomber:explode', this.bomberHandler); this.bomberHandler = null; }
     if (this.touchControls) { this.touchControls.destroy(); this.touchControls = null; }
     if (this.hud) { this.hud.destroy(); this.hud = null; }
     if (this.spawnSystem) { this.spawnSystem.destroy(); this.spawnSystem = null; }
