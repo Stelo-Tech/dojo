@@ -45,23 +45,23 @@ const COLOR_BTN_SECONDARY_BORDER = 0x334466;
 const COLOR_TEXT_DIM = 0xaaaaaa;
 
 /** Panel dimensions */
-const PANEL_W = 480;
-const PANEL_H = 320;
+const PANEL_W = 440;
+const PANEL_H = 380;
 const PANEL_X = GAME_WIDTH / 2 - PANEL_W / 2;
-const PANEL_Y = GAME_HEIGHT / 2 - PANEL_H / 2;
+const PANEL_Y = GAME_HEIGHT / 2 - PANEL_H / 2 - 10;
 const PANEL_RADIUS = 14;
 
-/** Button dimensions — tall enough for thumb tap (≥ 44px) */
-const BTN_W = 180;
-const BTN_H = 52;
+/** Button dimensions — tall enough for thumb tap (>= 44px) */
+const BTN_W = 170;
+const BTN_H = 48;
 const BTN_RADIUS = 10;
-const BTN_Y = PANEL_Y + PANEL_H - BTN_H - 20;
-const BTN_LEFT_X = GAME_WIDTH / 2 - BTN_W - 14;
-const BTN_RIGHT_X = GAME_WIDTH / 2 + 14;
+const BTN_Y = PANEL_Y + PANEL_H - BTN_H - 18;
+const BTN_LEFT_X = GAME_WIDTH / 2 - BTN_W - 12;
+const BTN_RIGHT_X = GAME_WIDTH / 2 + 12;
 
 /** Star dimensions */
-const STAR_SIZE = 30;
-const STAR_SPACING = 20;
+const STAR_SIZE = 22;
+const STAR_SPACING = 16;
 
 export class ResultScene extends Phaser.Scene {
   constructor() {
@@ -204,7 +204,7 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private buildStars(count: 0 | 1 | 2 | 3): void {
-    const starY = PANEL_Y + 185;
+    const starY = PANEL_Y + 200;
     const totalWidth = 3 * STAR_SIZE * 2 + 2 * STAR_SPACING;
     const startX = GAME_WIDTH / 2 - totalWidth / 2 + STAR_SIZE;
 
