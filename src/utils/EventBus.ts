@@ -71,6 +71,8 @@ export type GameEvents = {
   'builder:build': { id: number; x: number; y: number; direction: 1 | -1 };
   'bomber:explode': { id: number; x: number; y: number };
   'skill:assigned': { lemmingId: number; skill: string };
+  'skill:selected': { skill: string | null };
+  'skill:counts': Record<string, number>;
 }
 
 /** Singleton event bus instance for the game */
