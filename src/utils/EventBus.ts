@@ -65,6 +65,12 @@ export type GameEvents = {
   'level:start': { levelId: string };
   'level:pause': undefined;
   'level:resume': undefined;
+  'digger:dig': { id: number; x: number; y: number };
+  'basher:dig': { id: number; x: number; y: number; direction: 1 | -1 };
+  'miner:dig': { id: number; x: number; y: number; direction: 1 | -1 };
+  'builder:build': { id: number; x: number; y: number; direction: 1 | -1 };
+  'bomber:explode': { id: number; x: number; y: number };
+  'skill:assigned': { lemmingId: number; skill: string };
 }
 
 /** Singleton event bus instance for the game */

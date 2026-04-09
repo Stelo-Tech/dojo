@@ -63,12 +63,60 @@ export const EXIT_HEIGHT = 30;
 export const SPAWN_X = 100;
 export const SPAWN_Y = 370;
 
+/** Skill types — assignable abilities */
+export type SkillType =
+  | 'digger'
+  | 'basher'
+  | 'miner'
+  | 'builder'
+  | 'blocker'
+  | 'climber'
+  | 'floater'
+  | 'bomber';
+
+/** Builder config */
+export const BUILDER_MAX_STEPS = 12;
+export const BUILDER_STEP_WIDTH = 6;
+export const BUILDER_STEP_HEIGHT = 2;
+export const BUILDER_STEP_INTERVAL = 0.3;
+
+/** Bomber countdown in seconds */
+export const BOMBER_COUNTDOWN = 3;
+
+/** Skill speed multipliers (relative to LEMMING_SPEED or GRAVITY) */
+export const DIGGER_SPEED_MULT = 0.5;
+export const BASHER_SPEED_MULT = 0.3;
+export const MINER_SPEED_MULT_X = 0.4;
+export const MINER_SPEED_MULT_Y = 0.3;
+export const CLIMBER_SPEED_MULT = 0.5;
+export const FLOATER_GRAVITY_MULT = 0.2;
+
+/** Skills available per level (default) */
+export const SKILLS_AVAILABLE: Readonly<Record<SkillType, number>> = {
+  digger: 5,
+  basher: 3,
+  miner: 3,
+  builder: 5,
+  blocker: 3,
+  climber: 3,
+  floater: 3,
+  bomber: 2,
+};
+
 /** Visual colors per state */
 export const STATE_COLORS: Readonly<Record<string, number>> = {
   walker: 0x00ff00,
   faller: 0xffff00,
   dead: 0x666666,
   saved: 0xffffff,
+  digger: 0xff8800,
+  basher: 0xff4400,
+  miner: 0xcc6600,
+  builder: 0x00ccff,
+  blocker: 0xff0000,
+  climber: 0x8800ff,
+  floater: 0x88ffff,
+  bomber: 0xff0044,
 };
 
 /** Hair color for lemmings (distinguishing feature) */

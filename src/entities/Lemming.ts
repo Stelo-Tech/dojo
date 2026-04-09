@@ -6,6 +6,14 @@ import {
   FallerState,
   DeadState,
   SavedState,
+  DiggerState,
+  BasherState,
+  MinerState,
+  BuilderState,
+  BlockerState,
+  ClimberState,
+  FloaterState,
+  BomberState,
 } from '@/entities/LemmingStates';
 import { gameEventBus } from '@/utils/EventBus';
 import {
@@ -35,6 +43,8 @@ export class Lemming implements LemmingEntity {
   fallDistance = 0;
   alive = false;
   saved = false;
+  isClimber?: boolean;
+  isFloater?: boolean;
 
   private readonly states: ReadonlyMap<string, State<LemmingEntity>>;
   private currentState: State<LemmingEntity>;
@@ -82,6 +92,14 @@ export class Lemming implements LemmingEntity {
       ['faller', faller],
       ['dead', dead],
       ['saved', savedState],
+      ['digger', new DiggerState()],
+      ['basher', new BasherState()],
+      ['miner', new MinerState()],
+      ['builder', new BuilderState()],
+      ['blocker', new BlockerState()],
+      ['climber', new ClimberState()],
+      ['floater', new FloaterState()],
+      ['bomber', new BomberState()],
     ]);
 
     this.currentState = walker;
@@ -96,6 +114,8 @@ export class Lemming implements LemmingEntity {
     this.saved = false;
     this.changingState = false;
     this.pendingState = null;
+    this.isClimber = undefined;
+    this.isFloater = undefined;
 
     this.flash.active = false;
     this.flash.elapsed = 0;
