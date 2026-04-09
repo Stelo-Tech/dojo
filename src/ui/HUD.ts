@@ -44,7 +44,7 @@ export class HUD {
     this.barBackground.fillStyle(0x334466, 1);
     this.barBackground.fillRect(0, HUD_BAR_Y, GAME_WIDTH, 2);
     // Bar body
-    this.barBackground.fillStyle(0x111827, 0.95);
+    this.barBackground.fillStyle(0x111827, 1);
     this.barBackground.fillRect(0, HUD_BAR_Y + 2, GAME_WIDTH, HUD_BAR_HEIGHT - 2);
 
     // Status text (French)

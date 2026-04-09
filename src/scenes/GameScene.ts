@@ -21,6 +21,7 @@ import {
   SPAWN_PORTAL_WIDTH,
   SPAWN_PORTAL_HEIGHT,
   EXIT_PULSE_SPEED,
+  HUD_BAR_Y,
 } from '@/utils/Constants';
 import { gameEventBus } from '@/utils/EventBus';
 import { LemmingPool } from '@/entities/LemmingPool';

@@ -17,9 +17,9 @@ export const LEMMING_FALL_DISTANCE = 60;
 export const MAX_LEMMINGS = 100;
 export const SPAWN_INTERVAL = 1000;
 
-/** Terrain */
-export const TERRAIN_Y = 450;
-export const TERRAIN_HEIGHT = 90;
+/** Terrain — sits flush above HUD bar (y=400..470) */
+export const TERRAIN_Y = 400;
+export const TERRAIN_HEIGHT = 70;
 export const TERRAIN_COLOR = 0x8b5e2a;
 
 /** Maximum step height a walker can auto-climb (pixels) */
@@ -41,9 +41,9 @@ export const TOOL_DIG_DEPTH = 40;
 export const TOOL_WALL_WIDTH = 6;
 export const TOOL_WALL_HEIGHT = 20;
 
-/** Tool: Ramp (place a triangular ramp on terrain) */
-export const TOOL_RAMP_LENGTH = 60;
-export const TOOL_RAMP_HEIGHT = 30;
+/** Tool: Ramp (place a smooth slope on terrain) */
+export const TOOL_RAMP_LENGTH = 50;
+export const TOOL_RAMP_HEIGHT = 20;
 
 /** Tool availability per level */
 export const TOOLS_AVAILABLE: Readonly<Record<ToolType, number>> = {
@@ -55,13 +55,13 @@ export const TOOLS_AVAILABLE: Readonly<Record<ToolType, number>> = {
 
 /** Exit zone */
 export const EXIT_X = 850;
-export const EXIT_Y = 420;
+export const EXIT_Y = 370;
 export const EXIT_WIDTH = 30;
 export const EXIT_HEIGHT = 30;
 
 /** Spawn point */
 export const SPAWN_X = 100;
-export const SPAWN_Y = 370;
+export const SPAWN_Y = 320;
 
 /** Visual colors per state */
 export const STATE_COLORS: Readonly<Record<string, number>> = {
@@ -147,16 +147,16 @@ interface LevelRect {
 }
 
 /** Spawn platform */
-export const PLATFORM_LEFT: LevelRect = { x: 50, y: 390, w: 200, h: 15 };
+export const PLATFORM_LEFT: LevelRect = { x: 50, y: 340, w: 200, h: 15 };
 
 /** Danger ledge */
-export const LEFT_CLIFF_GAP: LevelRect = { x: 0, y: TERRAIN_Y, w: 120, h: 90 };
+export const LEFT_CLIFF_GAP: LevelRect = { x: 0, y: TERRAIN_Y, w: 120, h: TERRAIN_HEIGHT };
 
 /** Wide gap requiring Stairs (80px = exact stair range) */
-export const FOSSE_GAP: LevelRect = { x: 300, y: TERRAIN_Y, w: 80, h: 90 };
+export const FOSSE_GAP: LevelRect = { x: 300, y: TERRAIN_Y, w: 80, h: TERRAIN_HEIGHT };
 
 /** Vertical wall — needs Ramp or Dig */
-export const WALL_VERT: LevelRect = { x: 550, y: 380, w: 20, h: 70 };
+export const WALL_VERT: LevelRect = { x: 550, y: 330, w: 20, h: 70 };
 
 /** Platform behind wall leading to exit */
 export const EXIT_PLATFORM: LevelRect = { x: 570, y: TERRAIN_Y, w: 350, h: 20 };

@@ -1,17 +1,17 @@
 import Phaser from 'phaser';
 import {
   GAME_WIDTH,
-  GAME_HEIGHT,
   TERRAIN_Y,
   TERRAIN_HEIGHT,
   TERRAIN_COLOR,
   TERRAIN_SURFACE_COLOR,
   TERRAIN_HIGHLIGHT_COLOR,
   TERRAIN_DEEP_COLOR,
+  HUD_BAR_Y,
 } from '@/utils/Constants';
 
-const TERRAIN_ORIGIN_Y = 300;
-const FULL_TERRAIN_HEIGHT = GAME_HEIGHT - TERRAIN_ORIGIN_Y;
+const TERRAIN_ORIGIN_Y = 250;
+const FULL_TERRAIN_HEIGHT = HUD_BAR_Y - TERRAIN_ORIGIN_Y;
 
 // Bayer 4x4 threshold matrix (values 0–15, normalised to 0–1 in use)
 const BAYER4: readonly number[] = [
@@ -50,6 +50,8 @@ export class TerrainSystem {
     );
     this.rt.setOrigin(0, 0);
     this.rt.setDepth(10);
+    // Force bilinear filtering so Scale.FIT upscaling stays smooth
+    this.rt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
 
     const groundLocalY = TERRAIN_Y - TERRAIN_ORIGIN_Y;
     this.setGridRect(0, groundLocalY, GAME_WIDTH, TERRAIN_HEIGHT, 1);
@@ -163,9 +165,28 @@ export class TerrainSystem {
   buildStep(worldX: number, worldY: number, width: number, height: number): void {
     const localX = Math.floor(worldX - this.originX);
     const localY = Math.floor(worldY - this.originY);
-    this.setGridRect(localX, localY, Math.ceil(width), Math.ceil(height), 1);
-    // Use multi-layer terrain visuals so placed terrain matches natural terrain
-    this.drawTerrainLayers(localX, localY, Math.ceil(width), Math.ceil(height));
+    const w = Math.ceil(width);
+    const h = Math.ceil(height);
+    this.setGridRect(localX, localY, w, h, 1);
+    if (w >= 8 && h >= 8) {
+      // Large enough for multi-layer terrain visuals
+      this.drawTerrainLayers(localX, localY, w, h);
+    } else {
+      // Small pieces (ramp slices, thin steps) — draw flat to avoid visual artifacts
+      this.fillPixel.setFillStyle(TERRAIN_COLOR);
+      this.fillPixel.setPosition(0, 0);
+      this.fillPixel.setDisplaySize(w, h);
+      this.fillPixel.setVisible(true);
+      this.rt.draw(this.fillPixel, localX, localY);
+      // Add 1px grass cap on top if height >= 3
+      if (h >= 3) {
+        this.fillPixel.setFillStyle(TERRAIN_SURFACE_COLOR);
+        this.fillPixel.setDisplaySize(w, 1);
+        this.rt.draw(this.fillPixel, localX, localY);
+      }
+      this.fillPixel.setVisible(false);
+      this.fillPixel.setFillStyle(TERRAIN_COLOR);
+    }
   }
 
   eraseRect(worldX: number, worldY: number, width: number, height: number): void {

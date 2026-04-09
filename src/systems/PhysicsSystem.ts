@@ -2,7 +2,7 @@ import { LemmingPool } from '@/entities/LemmingPool';
 import { TerrainSystem } from '@/systems/TerrainSystem';
 import {
   GAME_WIDTH,
-  GAME_HEIGHT,
+  HUD_BAR_Y,
   STEP_CLIMB_MAX,
 } from '@/utils/Constants';
 
@@ -25,7 +25,7 @@ export class PhysicsSystem {
       const state = lemming.getStateName();
 
       // Out-of-bounds kill
-      if (lemming.x < 0 || lemming.x > GAME_WIDTH || lemming.y > GAME_HEIGHT) {
+      if (lemming.x < 0 || lemming.x > GAME_WIDTH || lemming.y > HUD_BAR_Y) {
         lemming.changeState('dead');
         continue;
       }
