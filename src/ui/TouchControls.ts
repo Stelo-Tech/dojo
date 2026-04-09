@@ -15,6 +15,10 @@ import {
   TOOL_RAMP_LENGTH,
   TOOL_RAMP_HEIGHT,
   WALL_TERRAIN_COLOR,
+  EXIT_X,
+  EXIT_Y,
+  EXIT_WIDTH,
+  EXIT_HEIGHT,
 } from '@/utils/Constants';
 
 export class TouchControls {
@@ -43,9 +47,17 @@ export class TouchControls {
     this.scene.input.on('pointerdown', this.onPointerDownBound);
   }
 
+  private isInExitZone(x: number, y: number): boolean {
+    const margin = 20;
+    return x >= EXIT_X - margin && x <= EXIT_X + EXIT_WIDTH + margin &&
+           y >= EXIT_Y - margin && y <= EXIT_Y + EXIT_HEIGHT + margin;
+  }
+
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
     const worldX = pointer.worldX;
     const worldY = pointer.worldY;
+
+    if (this.isInExitZone(worldX, worldY)) return;
 
     const selectedTool = this.hud.getSelectedTool();
     if (selectedTool === null) return;

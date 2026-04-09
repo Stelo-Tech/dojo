@@ -38,20 +38,18 @@ export class GameScene extends Phaser.Scene {
   private terrainSystem: TerrainSystem | null = null;
   private hud: HUD | null = null;
   private touchControls: TouchControls | null = null;
-  private exitZone: Phaser.GameObjects.Rectangle | null = null;
-  private exitGlow: Phaser.GameObjects.Rectangle | null = null;
+  private exitZone: Phaser.GameObjects.Graphics | null = null;
+  private exitGlow: Phaser.GameObjects.Graphics | null = null;
   private exitLabel: Phaser.GameObjects.Text | null = null;
   private savedCount = 0;
   private deadCount = 0;
   private diedHandler: ((data: { id: number; cause: string }) => void) | null = null;
   private elapsedTime = 0;
 
-  private readonly bgLayers: Phaser.GameObjects.Rectangle[] = [];
-  private readonly starGraphics: Phaser.GameObjects.Rectangle[] = [];
-  private readonly gridLines: Phaser.GameObjects.Line[] = [];
-  private spawnPortal: Phaser.GameObjects.Rectangle | null = null;
+  private bgGraphics: Phaser.GameObjects.Graphics | null = null;
+  private readonly starGraphics: Phaser.GameObjects.Arc[] = [];
+  private spawnPortal: Phaser.GameObjects.Graphics | null = null;
   private spawnLabel: Phaser.GameObjects.Text | null = null;
-  private spawnTriangle: Phaser.GameObjects.Triangle | null = null;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -64,7 +62,6 @@ export class GameScene extends Phaser.Scene {
 
     this.createBackground();
     this.createStars();
-    this.createGrid();
 
     this.terrainSystem = new TerrainSystem(this);
     this.buildLevel();
@@ -131,11 +128,52 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createBackground(): void {
-    const bandHeight = Math.ceil(GAME_HEIGHT / 3);
-    const topBand = this.add.rectangle(GAME_WIDTH / 2, bandHeight / 2, GAME_WIDTH, bandHeight, BG_COLOR_TOP).setDepth(0);
-    const midBand = this.add.rectangle(GAME_WIDTH / 2, bandHeight + bandHeight / 2, GAME_WIDTH, bandHeight, BG_COLOR_MID).setDepth(0);
-    const bottomBand = this.add.rectangle(GAME_WIDTH / 2, bandHeight * 2 + bandHeight / 2, GAME_WIDTH, bandHeight + 1, BG_COLOR_BOTTOM).setDepth(0);
-    this.bgLayers.push(topBand, midBand, bottomBand);
+    // Simulate a vertical gradient by drawing thin horizontal strips that
+    // interpolate between BG_COLOR_TOP (top) → BG_COLOR_MID (sky line) →
+    // BG_COLOR_BOTTOM (ground level).  Using 60 strips gives a smooth
+    // appearance without any external shader dependency.
+    const g = this.add.graphics().setDepth(0);
+    this.bgGraphics = g;
+
+    const STRIPS = 60;
+    const stripH = Math.ceil(GAME_HEIGHT / STRIPS) + 1;
+
+    const rT = (BG_COLOR_TOP >> 16) & 0xff;
+    const gT = (BG_COLOR_TOP >> 8) & 0xff;
+    const bT = BG_COLOR_TOP & 0xff;
+
+    const rM = (BG_COLOR_MID >> 16) & 0xff;
+    const gM = (BG_COLOR_MID >> 8) & 0xff;
+    const bM = BG_COLOR_MID & 0xff;
+
+    const rB = (BG_COLOR_BOTTOM >> 16) & 0xff;
+    const gB = (BG_COLOR_BOTTOM >> 8) & 0xff;
+    const bB = BG_COLOR_BOTTOM & 0xff;
+
+    const skyFraction = 0.65; // top 65 % is sky, bottom 35 % is underground glow
+
+    for (let i = 0; i < STRIPS; i++) {
+      const t = i / (STRIPS - 1);
+      let r: number, gr: number, b: number;
+      if (t <= skyFraction) {
+        const s = t / skyFraction;
+        r = Math.round(rT + (rM - rT) * s);
+        gr = Math.round(gT + (gM - gT) * s);
+        b = Math.round(bT + (bM - bT) * s);
+      } else {
+        const s = (t - skyFraction) / (1 - skyFraction);
+        r = Math.round(rM + (rB - rM) * s);
+        gr = Math.round(gM + (gB - gM) * s);
+        b = Math.round(bM + (bB - bM) * s);
+      }
+      const color = (r << 16) | (gr << 8) | b;
+      g.fillStyle(color, 1);
+      g.fillRect(0, i * (GAME_HEIGHT / STRIPS), GAME_WIDTH, stripH);
+    }
+
+    // Subtle atmospheric haze near terrain line
+    g.fillStyle(0x2a3a6a, 0.18);
+    g.fillRect(0, TERRAIN_Y - 60, GAME_WIDTH, 80);
   }
 
   private createStars(): void {
@@ -144,26 +182,36 @@ export class GameScene extends Phaser.Scene {
       seed = (seed * 16807 + 0) % 2147483647;
       return seed / 2147483647;
     };
+
+    const skyBottom = TERRAIN_Y - 60;
+
     for (let i = 0; i < BG_STAR_COUNT; i++) {
       const sx = nextRand() * GAME_WIDTH;
-      const sy = nextRand() * (TERRAIN_Y - 40);
-      const size = 1 + Math.floor(nextRand() * 2);
-      const alpha = 0.3 + nextRand() * 0.7;
-      const star = this.add.rectangle(sx, sy, size, size, 0xffffff, alpha).setDepth(1);
-      this.starGraphics.push(star);
-    }
-  }
+      const sy = nextRand() * skyBottom;
+      const radius = 0.6 + nextRand() * 1.8;
+      const baseAlpha = 0.35 + nextRand() * 0.65;
 
-  private createGrid(): void {
-    const gridAlpha = 0.05;
-    const gridSpacing = 50;
-    for (let gx = 0; gx <= GAME_WIDTH; gx += gridSpacing) {
-      const line = this.add.line(0, 0, gx, 0, gx, GAME_HEIGHT, 0xffffff, gridAlpha).setOrigin(0, 0).setDepth(2);
-      this.gridLines.push(line);
-    }
-    for (let gy = 0; gy <= GAME_HEIGHT; gy += gridSpacing) {
-      const line = this.add.line(0, 0, 0, gy, GAME_WIDTH, gy, 0xffffff, gridAlpha).setOrigin(0, 0).setDepth(2);
-      this.gridLines.push(line);
+      // Colour temperature: mostly white, some warm/cool tints
+      const tint = nextRand();
+      let color = 0xffffff;
+      if (tint < 0.15) color = 0xffe8d0; // warm
+      else if (tint < 0.3) color = 0xd0e8ff; // cool blue
+
+      const star = this.add.circle(sx, sy, radius, color, baseAlpha).setDepth(1);
+      this.starGraphics.push(star);
+
+      // Gentle twinkle tween with randomised delay
+      const delay = nextRand() * 3000;
+      const duration = 1500 + nextRand() * 2500;
+      this.tweens.add({
+        targets: star,
+        alpha: { from: baseAlpha, to: baseAlpha * 0.2 },
+        duration,
+        delay,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
     }
   }
 
@@ -189,9 +237,53 @@ export class GameScene extends Phaser.Scene {
   private createSpawnPortal(): void {
     const portalX = SPAWN_X;
     const portalY = SPAWN_Y - 10;
-    this.spawnPortal = this.add.rectangle(portalX, portalY, SPAWN_PORTAL_WIDTH, SPAWN_PORTAL_HEIGHT, SPAWN_PORTAL_COLOR, 0.7).setDepth(50);
-    this.spawnLabel = this.add.text(portalX, portalY - 18, 'SPAWN', { fontSize: '10px', color: '#4488ff', fontFamily: 'Arial', fontStyle: 'bold' }).setOrigin(0.5).setDepth(50);
-    this.spawnTriangle = this.add.triangle(portalX, portalY + 14, 0, 0, 10, 0, 5, 8, SPAWN_PORTAL_COLOR, 0.9).setDepth(50);
+    const pw = SPAWN_PORTAL_WIDTH + 10;
+    const ph = SPAWN_PORTAL_HEIGHT + 10;
+
+    const g = this.add.graphics().setDepth(50);
+    this.spawnPortal = g;
+
+    // Outer glow ring
+    g.fillStyle(0x2255cc, 0.25);
+    g.fillEllipse(portalX, portalY, pw + 20, ph + 20);
+
+    // Portal rim (darker blue ring)
+    g.fillStyle(0x1a44bb, 0.85);
+    g.fillEllipse(portalX, portalY, pw + 8, ph + 8);
+
+    // Portal inner (bright core)
+    g.fillStyle(0x66aaff, 0.9);
+    g.fillEllipse(portalX, portalY, pw, ph);
+
+    // Specular highlight
+    g.fillStyle(0xeef4ff, 0.5);
+    g.fillEllipse(portalX - pw * 0.18, portalY - ph * 0.25, pw * 0.4, ph * 0.28);
+
+    // Downward-pointing arrow to signal lemmings come from here
+    g.fillStyle(0xffffff, 0.8);
+    const ax = portalX;
+    const ay = portalY + ph * 0.5 + 6;
+    g.fillTriangle(ax - 6, ay, ax + 6, ay, ax, ay + 9);
+
+    // Pulsing outer aura tween
+    this.tweens.add({
+      targets: g,
+      alpha: { from: 1, to: 0.75 },
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    this.spawnLabel = this.add
+      .text(portalX, portalY - ph * 0.5 - 12, 'SPAWN', {
+        fontSize: '10px',
+        color: '#88bbff',
+        fontFamily: 'Arial',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(51);
   }
 
   private createExitZone(): void {

@@ -1,6 +1,5 @@
 import { LemmingPool } from '@/entities/LemmingPool';
 import { TerrainSystem } from '@/systems/TerrainSystem';
-import { gameEventBus } from '@/utils/EventBus';
 import {
   GAME_WIDTH,
   GAME_HEIGHT,
@@ -27,7 +26,6 @@ export class PhysicsSystem {
 
       // Out-of-bounds kill
       if (lemming.x < 0 || lemming.x > GAME_WIDTH || lemming.y > GAME_HEIGHT) {
-        gameEventBus.emit('lemming:died', { id: lemming.id, cause: 'out-of-bounds' });
         lemming.changeState('dead');
         continue;
       }

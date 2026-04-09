@@ -20,7 +20,7 @@ export const SPAWN_INTERVAL = 1000;
 /** Terrain */
 export const TERRAIN_Y = 450;
 export const TERRAIN_HEIGHT = 90;
-export const TERRAIN_COLOR = 0x8b4513;
+export const TERRAIN_COLOR = 0x8b5e2a;
 
 /** Maximum step height a walker can auto-climb (pixels) */
 export const STEP_CLIMB_MAX = 6;
@@ -65,14 +65,20 @@ export const SPAWN_Y = 370;
 
 /** Visual colors per state */
 export const STATE_COLORS: Readonly<Record<string, number>> = {
-  walker: 0x00ff00,
-  faller: 0xffff00,
-  dead: 0x666666,
-  saved: 0xffffff,
+  walker: 0x44dd66,
+  faller: 0xffcc22,
+  dead: 0x556677,
+  saved: 0xeef8ff,
 };
 
+/** Lemming body base color (torso/limbs) */
+export const LEMMING_BODY_COLOR = 0x3399ff;
+
+/** Lemming skin tone (face/hands) */
+export const LEMMING_SKIN_COLOR = 0xffcc99;
+
 /** Hair color for lemmings (distinguishing feature) */
-export const HAIR_COLOR = 0x4488ff;
+export const HAIR_COLOR = 0x2266ee;
 
 /** Direction indicator color */
 export const DIRECTION_COLOR = 0xffaa00;
@@ -82,13 +88,19 @@ export const FLASH_DURATION_DEATH = 200;
 export const FLASH_DURATION_SAVED = 200;
 export const FLASH_DURATION_PLACEMENT = 150;
 
-/** Background colors */
-export const BG_COLOR_TOP = 0x0a0a1e;
-export const BG_COLOR_MID = 0x12122e;
-export const BG_COLOR_BOTTOM = 0x1a1a3e;
+/** Background gradient stops (deep-space night sky) */
+export const BG_COLOR_TOP = 0x06061a;
+export const BG_COLOR_MID = 0x0d1230;
+export const BG_COLOR_BOTTOM = 0x182050;
 
 /** Star count for background decoration */
-export const BG_STAR_COUNT = 30;
+export const BG_STAR_COUNT = 60;
+
+/** Terrain earth biome palette */
+export const TERRAIN_SURFACE_COLOR = 0x5a9e3a;  // grass top strip
+export const TERRAIN_MID_COLOR = 0x8b5e2a;      // dirt body
+export const TERRAIN_DEEP_COLOR = 0x5c3510;     // deep shadow
+export const TERRAIN_HIGHLIGHT_COLOR = 0xa06b30; // upper highlight
 
 /** HUD button dimensions */
 export const HUD_BUTTON_WIDTH = 100;

@@ -83,6 +83,27 @@
   1. **Fix principal** : `snapToSurface` floor `startY` pour snapper les lemmings aux pixels entiers
   2. **Defense en profondeur** : `isAtExit` ajoute une tolerance de 2px sur l'axe Y
 
+### 2026-04-09 - Fix click-on-exit instant loss
+- **Probleme** : Cliquer pres de la sortie avec un outil (dig) detruit la plateforme exit, les lemmings tombent et meurent
+- **Cause racine** : `TouchControls.onPointerDown()` n'avait aucune exclusion pour la zone exit
+- **Fix** : Ajout `isInExitZone()` avec marge de 20px dans `src/ui/TouchControls.ts`
+
+### 2026-04-09 - Fix dead lemmings not counted
+- **Probleme** : Les lemmings morts par chute fatale ne sont pas comptabilises dans deadCount
+- **Cause racine** : `DeadState.enter()` ne emit pas `lemming:died`. L'event n'etait emit que pour les morts hors-limites dans PhysicsSystem
+- **Fix** :
+  - `src/entities/LemmingStates.ts` : `DeadState.enter()` emet `lemming:died` (centralise toutes les morts)
+  - `src/systems/PhysicsSystem.ts` : suppression emission doublon pour out-of-bounds
+
+### 2026-04-09 - Visual upgrade (less pixelated)
+- **Probleme** : Textures trop pixelisees, visuels basiques
+- **Fichiers modifies** :
+  - `src/config.ts` : `pixelArt: false`, `antialias: true`
+  - `src/utils/Constants.ts` : nouvelles couleurs (terrain biome, palette amelioree, 60 etoiles)
+  - `src/systems/TerrainSystem.ts` : terrain multi-couche (herbe, highlight, terre, ombre profonde) + dithering Bayer 4x4
+  - `src/entities/Lemming.ts` : sprite multi-parties (torse, tete, cheveux, yeux, jambes animees)
+  - `src/scenes/GameScene.ts` : background gradient, etoiles scintillantes, portail spawn, exit zone amelioree
+
 ---
 
 ## Notes techniques

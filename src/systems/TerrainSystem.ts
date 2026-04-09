@@ -5,10 +5,21 @@ import {
   TERRAIN_Y,
   TERRAIN_HEIGHT,
   TERRAIN_COLOR,
+  TERRAIN_SURFACE_COLOR,
+  TERRAIN_HIGHLIGHT_COLOR,
+  TERRAIN_DEEP_COLOR,
 } from '@/utils/Constants';
 
 const TERRAIN_ORIGIN_Y = 300;
 const FULL_TERRAIN_HEIGHT = GAME_HEIGHT - TERRAIN_ORIGIN_Y;
+
+// Bayer 4x4 threshold matrix (values 0–15, normalised to 0–1 in use)
+const BAYER4: readonly number[] = [
+   0,  8,  2, 10,
+  12,  4, 14,  6,
+   3, 11,  1,  9,
+  15,  7, 13,  5,
+];
 
 export class TerrainSystem {
   private readonly rt: Phaser.GameObjects.RenderTexture;
@@ -19,8 +30,10 @@ export class TerrainSystem {
   private readonly originY: number;
   private readonly terrainWidth: number;
   private readonly terrainHeight: number;
+  private readonly scene: Phaser.Scene;
 
   constructor(scene: Phaser.Scene) {
+    this.scene = scene;
     this.originX = 0;
     this.originY = TERRAIN_ORIGIN_Y;
     this.terrainWidth = GAME_WIDTH;
@@ -49,10 +62,80 @@ export class TerrainSystem {
     this.eraseStamp.setOrigin(0, 0);
     this.eraseStamp.setVisible(false);
 
-    this.fillPixel.setDisplaySize(GAME_WIDTH, TERRAIN_HEIGHT);
-    this.fillPixel.setVisible(true);
-    this.rt.draw(this.fillPixel, 0, groundLocalY);
-    this.fillPixel.setVisible(false);
+    // Draw the initial ground with multi-layer terrain visuals
+    this.drawTerrainLayers(0, groundLocalY, GAME_WIDTH, TERRAIN_HEIGHT);
+  }
+
+  /**
+   * Draw a visually rich terrain block into the RenderTexture at local
+   * coordinates (lx, ly). The block is composed of:
+   *   - A 4px grass surface strip (TERRAIN_SURFACE_COLOR)
+   *   - A 1px highlight line just below the grass (TERRAIN_HIGHLIGHT_COLOR)
+   *   - The main dirt body with a subtle noise dither using TERRAIN_COLOR
+   *   - A deep shadow band at the bottom (TERRAIN_DEEP_COLOR)
+   *
+   * A Bayer 4x4 ordered dithering pass is applied to the top 8px to blend
+   * the grass into the dirt, giving a soft natural edge without shaders.
+   */
+  private drawTerrainLayers(lx: number, ly: number, w: number, h: number): void {
+    const g = this.scene.add.graphics().setVisible(false);
+
+    // --- Deep shadow band (bottom 20% of block, min 8px) ---
+    const deepH = Math.max(8, Math.round(h * 0.2));
+    g.fillStyle(TERRAIN_DEEP_COLOR, 1);
+    g.fillRect(0, 0, w, deepH);
+    this.rt.draw(g, lx, ly + h - deepH);
+    g.clear();
+
+    // --- Dirt body ---
+    g.fillStyle(TERRAIN_COLOR, 1);
+    g.fillRect(0, 0, w, h - deepH);
+    this.rt.draw(g, lx, ly);
+    g.clear();
+
+    // --- Highlight line (1px, just below grass) ---
+    g.fillStyle(TERRAIN_HIGHLIGHT_COLOR, 1);
+    g.fillRect(0, 0, w, 1);
+    this.rt.draw(g, lx, ly + 4);
+    g.clear();
+
+    // --- Grass surface strip (4px) ---
+    g.fillStyle(TERRAIN_SURFACE_COLOR, 1);
+    g.fillRect(0, 0, w, 4);
+    this.rt.draw(g, lx, ly);
+    g.clear();
+
+    // --- Bayer dithering: blend grass→dirt over 8px below surface ---
+    // For each pixel row 0..7 we only paint pixels where the normalised
+    // Bayer threshold is above the blend factor, mixing SURFACE into DIRT.
+    const ditherRows = Math.min(8, h - 4);
+    for (let dy = 0; dy < ditherRows; dy++) {
+      const blend = (dy + 1) / (ditherRows + 1); // 0 near top → 1 near bottom
+      for (let dx = 0; dx < w; dx++) {
+        const bayer = (BAYER4[((dy & 3) * 4) + (dx & 3)] ?? 0) / 15;
+        if (bayer < blend) {
+          // paint dirt color over this pixel
+          g.fillStyle(TERRAIN_COLOR, 1);
+          g.fillRect(dx, 0, 1, 1);
+        }
+      }
+      if (dy < ditherRows - 1) {
+        this.rt.draw(g, lx, ly + 4 + dy);
+        g.clear();
+      }
+    }
+    this.rt.draw(g, lx, ly + 4 + ditherRows - 1);
+    g.clear();
+
+    // --- Subtle horizontal scan-line noise in dirt body (every 3px row) ---
+    g.fillStyle(TERRAIN_DEEP_COLOR, 0.18);
+    for (let sy = 8; sy < h - deepH; sy += 3) {
+      g.fillRect(0, sy, w, 1);
+    }
+    this.rt.draw(g, lx, ly);
+    g.clear();
+
+    g.destroy();
   }
 
   isGround(worldX: number, worldY: number): boolean {
@@ -81,11 +164,8 @@ export class TerrainSystem {
     const localX = Math.floor(worldX - this.originX);
     const localY = Math.floor(worldY - this.originY);
     this.setGridRect(localX, localY, Math.ceil(width), Math.ceil(height), 1);
-    this.fillPixel.setPosition(0, 0);
-    this.fillPixel.setDisplaySize(width, height);
-    this.fillPixel.setVisible(true);
-    this.rt.draw(this.fillPixel, localX, localY);
-    this.fillPixel.setVisible(false);
+    // Use multi-layer terrain visuals so placed terrain matches natural terrain
+    this.drawTerrainLayers(localX, localY, Math.ceil(width), Math.ceil(height));
   }
 
   eraseRect(worldX: number, worldY: number, width: number, height: number): void {
@@ -103,14 +183,19 @@ export class TerrainSystem {
     const localX = Math.floor(worldX - this.originX);
     const localY = Math.floor(worldY - this.originY);
     this.setGridRect(localX, localY, Math.ceil(width), Math.ceil(height), 1);
-    const useColor = color !== undefined ? color : TERRAIN_COLOR;
-    this.fillPixel.setFillStyle(useColor);
-    this.fillPixel.setPosition(0, 0);
-    this.fillPixel.setDisplaySize(width, height);
-    this.fillPixel.setVisible(true);
-    this.rt.draw(this.fillPixel, localX, localY);
-    this.fillPixel.setVisible(false);
-    this.fillPixel.setFillStyle(TERRAIN_COLOR);
+    if (color !== undefined) {
+      // Caller specified an explicit override color — draw flat (walls, etc.)
+      this.fillPixel.setFillStyle(color);
+      this.fillPixel.setPosition(0, 0);
+      this.fillPixel.setDisplaySize(width, height);
+      this.fillPixel.setVisible(true);
+      this.rt.draw(this.fillPixel, localX, localY);
+      this.fillPixel.setVisible(false);
+      this.fillPixel.setFillStyle(TERRAIN_COLOR);
+    } else {
+      // Natural terrain — use multi-layer visuals
+      this.drawTerrainLayers(localX, localY, Math.ceil(width), Math.ceil(height));
+    }
   }
 
   getTerrainTopY(): number {
