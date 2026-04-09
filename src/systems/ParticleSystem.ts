@@ -44,10 +44,8 @@ const POOL_SIZE = 128;
 
 export class ParticleSystem {
   private readonly pool: Particle[] = [];
-  private readonly scene: Phaser.Scene;
 
   constructor(scene: Phaser.Scene) {
-    this.scene = scene;
     for (let i = 0; i < POOL_SIZE; i++) {
       const gfx = scene.add.rectangle(0, 0, 2, 2, 0xffffff, 0);
       gfx.setDepth(80);

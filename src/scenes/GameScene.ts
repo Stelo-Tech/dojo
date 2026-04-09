@@ -181,8 +181,17 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
-    this.createVignette();
-    this.createLevelFlash();
+    // Vignette overlay for atmosphere
+    this.vignette = this.add.graphics().setDepth(300).setAlpha(0.15);
+    this.vignette.fillStyle(0x000000, 1);
+    this.vignette.fillRect(0, 0, GAME_WIDTH, 8);
+    this.vignette.fillRect(0, GAME_HEIGHT - 8, GAME_WIDTH, 8);
+    this.vignette.fillRect(0, 0, 8, GAME_HEIGHT);
+    this.vignette.fillRect(GAME_WIDTH - 8, 0, 8, GAME_HEIGHT);
+
+    // Level flash rect (hidden, used on level complete)
+    this.levelFlash = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0xffffff, 0);
+    this.levelFlash.setDepth(400);
 
     // Register cleanup on Phaser scene lifecycle events
     this.events.once('shutdown', this.cleanUp, this);
@@ -227,8 +236,31 @@ export class GameScene extends Phaser.Scene {
       this.particleSystem.update(dt);
     }
 
-    this.updateParallaxClouds(dt);
-    this.updateScreenShake(dt);
+    // Animate parallax clouds
+    if (this.cloudGraphics && this.clouds.length > 0) {
+      this.cloudGraphics.clear();
+      for (const c of this.clouds) {
+        c.x += c.speed * dt;
+        if (c.x > GAME_WIDTH + 80) c.x = -80;
+        this.cloudGraphics.fillStyle(0xffffff, c.alpha);
+        this.cloudGraphics.fillEllipse(c.x, c.y, c.wMult, c.hMult);
+      }
+    }
+
+    // Screen shake
+    if (this.shakeActive) {
+      this.shakeElapsed += dt;
+      if (this.shakeElapsed > 0.15) {
+        this.shakeActive = false;
+        this.cameras.main.setScroll(0, 0);
+      } else {
+        const intensity = 3 * (1 - this.shakeElapsed / 0.15);
+        this.cameras.main.setScroll(
+          (Math.random() - 0.5) * intensity * 2,
+          (Math.random() - 0.5) * intensity * 2,
+        );
+      }
+    }
 
     if (this.lemmingPool && this.levelData) {
       const active = this.lemmingPool.getActive();

@@ -1,31 +1,21 @@
-import { Capacitor } from '@capacitor/core';
-import { StatusBar, Style } from '@capacitor/status-bar';
-import { App } from '@capacitor/app';
-
+/**
+ * Mobile-specific helpers for Capacitor native platforms.
+ * Currently a stub — Capacitor integration will be activated
+ * when native builds are configured.
+ */
 export class MobileHelper {
-  /** Initialize mobile-specific features. No-op on web. */
+  /** Initialize mobile-specific features. No-op until Capacitor is set up. */
   static async init(): Promise<void> {
-    if (!Capacitor.isNativePlatform()) return;
-
-    // Hide status bar for fullscreen landscape gameplay
-    await StatusBar.setStyle({ style: Style.Dark });
-    await StatusBar.hide();
-
-    // Handle Android hardware back button
-    App.addListener('backButton', ({ canGoBack }) => {
-      if (!canGoBack) {
-        App.exitApp();
-      }
-    });
+    // Will be implemented when Capacitor is fully integrated
   }
 
-  /** Returns true when running inside a native Capacitor shell (Android/iOS). */
+  /** Returns true when running inside a native Capacitor shell. */
   static isNative(): boolean {
-    return Capacitor.isNativePlatform();
+    return false;
   }
 
-  /** Returns the current platform: 'android' | 'ios' | 'web'. */
+  /** Returns the current platform. */
   static getPlatform(): string {
-    return Capacitor.getPlatform();
+    return 'web';
   }
 }

@@ -536,7 +536,7 @@ export class LevelGenerator {
     endX: number,
     space: number,
     tier: number,
-    theme: LevelTheme,
+    _theme: LevelTheme,
     hazards: Hazard[],
   ): Segment {
     const midX = Math.floor((startX + endX) / 2);

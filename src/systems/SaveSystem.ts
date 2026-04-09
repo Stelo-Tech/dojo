@@ -374,8 +374,8 @@ export class SaveSystem {
         if (lp) {
           migratedLevels[key] = {
             ...lp,
-            bestScore: (lp as Record<string, unknown>)['bestScore'] as number ?? 0,
-            bestRank: (lp as Record<string, unknown>)['bestRank'] as 'S' | 'A' | 'B' | 'C' | 'F' ?? 'F',
+            bestScore: (lp as unknown as Record<string, unknown>)['bestScore'] as number ?? 0,
+            bestRank: (lp as unknown as Record<string, unknown>)['bestRank'] as 'S' | 'A' | 'B' | 'C' | 'F' ?? 'F',
           };
         }
       }
@@ -383,8 +383,8 @@ export class SaveSystem {
         ...current,
         version: 2,
         levels: migratedLevels,
-        achievements: (current as Record<string, unknown>)['achievements'] as readonly string[] ?? [],
-        dailyChallenge: (current as Record<string, unknown>)['dailyChallenge'] as DailyChallengeData ?? {
+        achievements: (current as unknown as Record<string, unknown>)['achievements'] as readonly string[] ?? [],
+        dailyChallenge: (current as unknown as Record<string, unknown>)['dailyChallenge'] as DailyChallengeData ?? {
           lastCompleted: '',
           streak: 0,
           bestScore: 0,
