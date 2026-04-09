@@ -30,12 +30,13 @@ export class HUD {
   private readonly toolCounts: Record<ToolType, number>;
   private readonly hudUpdateHandler: (data: { alive: number; saved: number; dead: number }) => void;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, toolBudget?: Readonly<Record<ToolType, number>>) {
+    const budget = toolBudget ?? TOOLS_AVAILABLE;
     this.toolCounts = {
-      dig: TOOLS_AVAILABLE.dig,
-      stairs: TOOLS_AVAILABLE.stairs,
-      wall: TOOLS_AVAILABLE.wall,
-      ramp: TOOLS_AVAILABLE.ramp,
+      dig: budget.dig,
+      stairs: budget.stairs,
+      wall: budget.wall,
+      ramp: budget.ramp,
     };
 
     // Dark bar background

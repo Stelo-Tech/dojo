@@ -126,6 +126,20 @@
 - **Fix** : `rt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR)` sur le RenderTexture du terrain
 - **HUD** : alpha 0.95→1.0 (full opaque)
 
+### 2026-04-09 - Systeme de niveaux proceduraux
+- **Nouveaux fichiers** :
+  - `src/levels/LevelData.ts` : interfaces (LevelData, DifficultyConfig, Segment, Obstacle, TerrainRect)
+  - `src/levels/LevelGenerator.ts` : generateur procedural avec PRNG deterministe (Park-Miller LCG)
+  - `src/levels/LevelValidator.ts` : validateur de solvabilite (simule un walker avec outils optimaux)
+  - `src/levels/LevelLoader.ts` : pont entre LevelData et TerrainSystem
+- **Fichiers modifies** :
+  - `src/scenes/GameScene.ts` : utilise LevelData au lieu de buildLevel() hardcode, spawn/exit dynamiques
+  - `src/scenes/LevelSelectScene.ts` : grille 5 tiers x 8 niveaux + bouton aleatoire
+  - `src/scenes/MenuScene.ts` : navigue vers LevelSelectScene
+  - `src/ui/HUD.ts` : accepte toolBudget dynamique
+  - `src/ui/TouchControls.ts` : exit rect dynamique
+  - `src/config.ts` : ajoute LevelSelectScene
+
 ---
 
 ## Notes techniques
@@ -150,11 +164,25 @@
 - Disparait dans zone HUD ou zone exit
 - Dig : rectangle rouge avec croix, Stairs : marches bleues, Wall : rectangle bleu, Ramp : triangle bleu
 
+### Systeme de niveaux proceduraux
+- **5 paliers de difficulte** (Tutoriel → Expert)
+  - Tier 1: 1 segment, 10 lemmings, 5 requis, toolSlack=3
+  - Tier 2: 2 segments, 15 lemmings, 8 requis, toolSlack=2
+  - Tier 3: 3 segments, 20 lemmings, 14 requis, toolSlack=1
+  - Tier 4: 4 segments, 25 lemmings, 20 requis, toolSlack=1
+  - Tier 5: 5 segments, 30 lemmings, 27 requis, toolSlack=0
+- **Obstacles** : gap, wall, pit, elevated_platform, none
+- **Validateur** : simule un walker optimal, verifie que les outils suffisent
+- **Seeds deterministes** : tier*1000+index → memes niveaux pour tous les joueurs
+- **Fallback** : si 20 seeds echouent, tier 1 seed 42
+
+### Navigation
+- Menu → LevelSelectScene → GameScene(levelData)
+- 5 tiers x 8 niveaux + bouton "NIVEAU ALEATOIRE"
+
 ### Constantes cles
 - `TERRAIN_Y=400`, `TERRAIN_HEIGHT=70` (terrain y=400..470, flush avec HUD)
-- `EXIT_X=850, EXIT_Y=370, EXIT_WIDTH=30, EXIT_HEIGHT=30`
 - `HUD_BAR_Y=470, HUD_BAR_HEIGHT=70`
 - `LEMMING_SPEED=40`, `LEMMING_FALL_DISTANCE=60`, `GRAVITY=300`
-- `SPAWN_INTERVAL=1000ms`, `SPAWN_X=100`, `SPAWN_Y=320`
-- `PLATFORM_LEFT.y=340`, `WALL_VERT.y=330`
+- Spawn/Exit desormais dynamiques via LevelData (plus de EXIT_X/EXIT_Y hardcodes)
 - `TERRAIN_ORIGIN_Y=250` (dans TerrainSystem.ts)

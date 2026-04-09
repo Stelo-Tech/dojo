@@ -15,17 +15,22 @@ import {
   TOOL_RAMP_LENGTH,
   TOOL_RAMP_HEIGHT,
   WALL_TERRAIN_COLOR,
-  EXIT_X,
-  EXIT_Y,
-  EXIT_WIDTH,
-  EXIT_HEIGHT,
   HUD_BAR_Y,
 } from '@/utils/Constants';
+
+/** Exit zone coordinates for protection */
+interface ExitZoneRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
 
 export class TouchControls {
   private readonly scene: Phaser.Scene;
   private readonly hud: HUD;
   private readonly terrain: TerrainSystem;
+  private readonly exitRect: ExitZoneRect;
   private readonly flashPool: Phaser.GameObjects.Rectangle[] = [];
   private readonly onPointerDownBound: (pointer: Phaser.Input.Pointer) => void;
   private readonly onPointerMoveBound: (pointer: Phaser.Input.Pointer) => void;
@@ -33,7 +38,8 @@ export class TouchControls {
   /** Preview ghost graphics */
   private preview: Phaser.GameObjects.Graphics;
 
-  constructor(scene: Phaser.Scene, hud: HUD, terrain: TerrainSystem) {
+  constructor(scene: Phaser.Scene, hud: HUD, terrain: TerrainSystem, exitRect?: ExitZoneRect) {
+    this.exitRect = exitRect ?? { x: 850, y: 370, width: 30, height: 30 };
     this.scene = scene;
     this.hud = hud;
     this.terrain = terrain;
@@ -60,8 +66,9 @@ export class TouchControls {
 
   private isInExitZone(x: number, y: number): boolean {
     const margin = 20;
-    return x >= EXIT_X - margin && x <= EXIT_X + EXIT_WIDTH + margin &&
-           y >= EXIT_Y - margin && y <= EXIT_Y + EXIT_HEIGHT + margin;
+    const ez = this.exitRect;
+    return x >= ez.x - margin && x <= ez.x + ez.width + margin &&
+           y >= ez.y - margin && y <= ez.y + ez.height + margin;
   }
 
   private isInHudBar(y: number): boolean {

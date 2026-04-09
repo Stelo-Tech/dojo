@@ -2,26 +2,14 @@ import Phaser from 'phaser';
 import {
   GAME_WIDTH,
   GAME_HEIGHT,
-  EXIT_X,
-  EXIT_Y,
-  EXIT_WIDTH,
-  EXIT_HEIGHT,
   TERRAIN_Y,
-  SPAWN_X,
-  SPAWN_Y,
   BG_COLOR_TOP,
   BG_COLOR_MID,
   BG_COLOR_BOTTOM,
   BG_STAR_COUNT,
-  PLATFORM_LEFT,
-  LEFT_CLIFF_GAP,
-  FOSSE_GAP,
-  WALL_VERT,
-  EXIT_PLATFORM,
   SPAWN_PORTAL_WIDTH,
   SPAWN_PORTAL_HEIGHT,
   EXIT_PULSE_SPEED,
-  HUD_BAR_Y,
 } from '@/utils/Constants';
 import { gameEventBus } from '@/utils/EventBus';
 import { LemmingPool } from '@/entities/LemmingPool';
@@ -30,6 +18,10 @@ import { PhysicsSystem } from '@/systems/PhysicsSystem';
 import { TerrainSystem } from '@/systems/TerrainSystem';
 import { HUD } from '@/ui/HUD';
 import { TouchControls } from '@/ui/TouchControls';
+import { LevelData, DifficultyConfig } from '@/levels/LevelData';
+import { LevelGenerator, DIFFICULTY_PRESETS } from '@/levels/LevelGenerator';
+import { LevelValidator } from '@/levels/LevelValidator';
+import { LevelLoader } from '@/levels/LevelLoader';
 
 export class GameScene extends Phaser.Scene {
   private lemmingPool: LemmingPool | null = null;
@@ -45,6 +37,7 @@ export class GameScene extends Phaser.Scene {
   private deadCount = 0;
   private diedHandler: ((data: { id: number; cause: string }) => void) | null = null;
   private elapsedTime = 0;
+  private levelData: LevelData | null = null;
 
   private bgGraphics: Phaser.GameObjects.Graphics | null = null;
   private readonly starGraphics: Phaser.GameObjects.Arc[] = [];
@@ -55,37 +48,67 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
-  create(): void {
+  create(data?: { levelData?: LevelData }): void {
     this.savedCount = 0;
     this.deadCount = 0;
     this.elapsedTime = 0;
 
+    // Get or generate level data
+    if (data?.levelData) {
+      this.levelData = data.levelData;
+    } else {
+      this.levelData = this.generateValidLevel(1, Date.now());
+    }
+
     this.createBackground();
     this.createStars();
 
+    // Build terrain from level data
     this.terrainSystem = new TerrainSystem(this);
-    this.buildLevel();
+    const loader = new LevelLoader();
+    loader.load(this.levelData, this.terrainSystem);
 
     this.createSpawnPortal();
     this.createExitZone();
 
-    this.lemmingPool = new LemmingPool(this, 20);
+    this.lemmingPool = new LemmingPool(this, this.levelData.lemmingCount);
 
     this.spawnSystem = new SpawnSystem(this.lemmingPool, {
-      x: SPAWN_X,
-      y: SPAWN_Y,
-      maxLemmings: 20,
-      spawnInterval: 1000,
+      x: this.levelData.spawn.x,
+      y: this.levelData.spawn.y,
+      maxLemmings: this.levelData.lemmingCount,
+      spawnInterval: this.levelData.spawnInterval,
     });
     this.physicsSystem = new PhysicsSystem(this.lemmingPool, this.terrainSystem);
 
-    this.hud = new HUD(this);
-    this.touchControls = new TouchControls(this, this.hud, this.terrainSystem);
+    this.hud = new HUD(this, this.levelData.toolBudget);
+    this.touchControls = new TouchControls(this, this.hud, this.terrainSystem, this.levelData.exit);
 
     this.diedHandler = (_data: { id: number; cause: string }) => {
       this.deadCount++;
     };
     gameEventBus.on('lemming:died', this.diedHandler);
+  }
+
+  /** Generate a level and validate it. Retry with different seeds if invalid. */
+  private generateValidLevel(tier: number, baseSeed: number): LevelData {
+    const config = DIFFICULTY_PRESETS[tier - 1];
+    if (!config) {
+      return this.generateValidLevel(1, baseSeed);
+    }
+    const generator = new LevelGenerator();
+    const validator = new LevelValidator();
+
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const level = generator.generate(config, baseSeed + attempt);
+      const result = validator.validate(level);
+      if (result.solvable) {
+        return level;
+      }
+    }
+    // Fallback: tier 1 with a simple seed
+    const fallback = generator.generate(DIFFICULTY_PRESETS[0] as DifficultyConfig, 42);
+    return fallback;
   }
 
   update(_time: number, delta: number): void {
@@ -102,12 +125,13 @@ export class GameScene extends Phaser.Scene {
       this.physicsSystem.update(dt);
     }
 
-    if (this.lemmingPool) {
+    if (this.lemmingPool && this.levelData) {
       const active = this.lemmingPool.getActive();
+      const ex = this.levelData.exit;
       for (let i = active.length - 1; i >= 0; i--) {
         const lemming = active[i];
         if (!lemming || !lemming.alive) continue;
-        if (this.isAtExit(lemming.x, lemming.y)) {
+        if (this.isAtExit(lemming.x, lemming.y, ex.x, ex.y, ex.width, ex.height)) {
           lemming.changeState('saved');
           this.savedCount++;
           gameEventBus.emit('lemming:saved', { id: lemming.id });
@@ -128,10 +152,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createBackground(): void {
-    // Simulate a vertical gradient by drawing thin horizontal strips that
-    // interpolate between BG_COLOR_TOP (top) → BG_COLOR_MID (sky line) →
-    // BG_COLOR_BOTTOM (ground level).  Using 60 strips gives a smooth
-    // appearance without any external shader dependency.
     const g = this.add.graphics().setDepth(0);
     this.bgGraphics = g;
 
@@ -150,7 +170,7 @@ export class GameScene extends Phaser.Scene {
     const gB = (BG_COLOR_BOTTOM >> 8) & 0xff;
     const bB = BG_COLOR_BOTTOM & 0xff;
 
-    const skyFraction = 0.65; // top 65 % is sky, bottom 35 % is underground glow
+    const skyFraction = 0.65;
 
     for (let i = 0; i < STRIPS; i++) {
       const t = i / (STRIPS - 1);
@@ -171,7 +191,6 @@ export class GameScene extends Phaser.Scene {
       g.fillRect(0, i * (GAME_HEIGHT / STRIPS), GAME_WIDTH, stripH);
     }
 
-    // Subtle atmospheric haze near terrain line
     g.fillStyle(0x2a3a6a, 0.18);
     g.fillRect(0, TERRAIN_Y - 60, GAME_WIDTH, 80);
   }
@@ -191,16 +210,14 @@ export class GameScene extends Phaser.Scene {
       const radius = 0.6 + nextRand() * 1.8;
       const baseAlpha = 0.35 + nextRand() * 0.65;
 
-      // Colour temperature: mostly white, some warm/cool tints
       const tint = nextRand();
       let color = 0xffffff;
-      if (tint < 0.15) color = 0xffe8d0; // warm
-      else if (tint < 0.3) color = 0xd0e8ff; // cool blue
+      if (tint < 0.15) color = 0xffe8d0;
+      else if (tint < 0.3) color = 0xd0e8ff;
 
       const star = this.add.circle(sx, sy, radius, color, baseAlpha).setDepth(1);
       this.starGraphics.push(star);
 
-      // Gentle twinkle tween with randomised delay
       const delay = nextRand() * 3000;
       const duration = 1500 + nextRand() * 2500;
       this.tweens.add({
@@ -215,57 +232,29 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private buildLevel(): void {
-    if (!this.terrainSystem) return;
-    this.terrainSystem.fillRect(PLATFORM_LEFT.x, PLATFORM_LEFT.y, PLATFORM_LEFT.w, PLATFORM_LEFT.h);
-    const slopeStartX = PLATFORM_LEFT.x + PLATFORM_LEFT.w;
-    const slopeTopY = PLATFORM_LEFT.y + PLATFORM_LEFT.h;
-    const slopeSteps = 10;
-    const stepW = 5;
-    const stepH = Math.ceil((TERRAIN_Y - slopeTopY) / slopeSteps);
-    for (let s = 0; s < slopeSteps; s++) {
-      const sx = slopeStartX + s * stepW;
-      const sy = slopeTopY + s * stepH;
-      this.terrainSystem.fillRect(sx, sy, stepW, TERRAIN_Y - sy + 10);
-    }
-    this.terrainSystem.eraseRect(LEFT_CLIFF_GAP.x, LEFT_CLIFF_GAP.y, LEFT_CLIFF_GAP.w, LEFT_CLIFF_GAP.h);
-    this.terrainSystem.eraseRect(FOSSE_GAP.x, FOSSE_GAP.y, FOSSE_GAP.w, FOSSE_GAP.h);
-    this.terrainSystem.fillRect(WALL_VERT.x, WALL_VERT.y, WALL_VERT.w, WALL_VERT.h);
-    this.terrainSystem.fillRect(EXIT_PLATFORM.x, EXIT_PLATFORM.y, EXIT_PLATFORM.w, EXIT_PLATFORM.h);
-  }
-
   private createSpawnPortal(): void {
-    const portalX = SPAWN_X;
-    const portalY = SPAWN_Y - 10;
+    if (!this.levelData) return;
+    const portalX = this.levelData.spawn.x;
+    const portalY = this.levelData.spawn.y - 10;
     const pw = SPAWN_PORTAL_WIDTH + 10;
     const ph = SPAWN_PORTAL_HEIGHT + 10;
 
     const g = this.add.graphics().setDepth(50);
     this.spawnPortal = g;
 
-    // Outer glow ring
     g.fillStyle(0x2255cc, 0.25);
     g.fillEllipse(portalX, portalY, pw + 20, ph + 20);
-
-    // Portal rim (darker blue ring)
     g.fillStyle(0x1a44bb, 0.85);
     g.fillEllipse(portalX, portalY, pw + 8, ph + 8);
-
-    // Portal inner (bright core)
     g.fillStyle(0x66aaff, 0.9);
     g.fillEllipse(portalX, portalY, pw, ph);
-
-    // Specular highlight
     g.fillStyle(0xeef4ff, 0.5);
     g.fillEllipse(portalX - pw * 0.18, portalY - ph * 0.25, pw * 0.4, ph * 0.28);
-
-    // Downward-pointing arrow to signal lemmings come from here
     g.fillStyle(0xffffff, 0.8);
     const ax = portalX;
     const ay = portalY + ph * 0.5 + 6;
     g.fillTriangle(ax - 6, ay, ax + 6, ay, ax, ay + 9);
 
-    // Pulsing outer aura tween
     this.tweens.add({
       targets: g,
       alpha: { from: 1, to: 0.75 },
@@ -287,47 +276,40 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createExitZone(): void {
-    const cx = EXIT_X + EXIT_WIDTH / 2;
-    const cy = EXIT_Y + EXIT_HEIGHT / 2;
+    if (!this.levelData) return;
+    const ex = this.levelData.exit;
+    const cx = ex.x + ex.width / 2;
 
-    // Outer glow halo — soft warm gold
     const halo = this.add.graphics().setDepth(49);
     halo.fillStyle(0xffd700, 0.12);
-    halo.fillRoundedRect(EXIT_X - 8, EXIT_Y - 8, EXIT_WIDTH + 16, EXIT_HEIGHT + 16, 8);
+    halo.fillRoundedRect(ex.x - 8, ex.y - 8, ex.width + 16, ex.height + 16, 8);
     this.exitGlow = halo;
 
-    // Door frame — two pillars + lintel
     const frame = this.add.graphics().setDepth(50);
-    // Left pillar
     frame.fillStyle(0x8b7355, 1);
-    frame.fillRect(EXIT_X, EXIT_Y, 5, EXIT_HEIGHT);
-    // Right pillar
-    frame.fillRect(EXIT_X + EXIT_WIDTH - 5, EXIT_Y, 5, EXIT_HEIGHT);
-    // Lintel (top bar)
+    frame.fillRect(ex.x, ex.y, 5, ex.height);
+    frame.fillRect(ex.x + ex.width - 5, ex.y, 5, ex.height);
     frame.fillStyle(0x6b5635, 1);
-    frame.fillRect(EXIT_X, EXIT_Y, EXIT_WIDTH, 5);
-    // Door interior — warm amber with gradient strips
+    frame.fillRect(ex.x, ex.y, ex.width, 5);
     const stripCount = 6;
-    const stripW = (EXIT_WIDTH - 10) / stripCount;
+    const stripW = (ex.width - 10) / stripCount;
     for (let s = 0; s < stripCount; s++) {
       const t = s / (stripCount - 1);
       const r = Math.round(0x33 + t * (0x88 - 0x33));
-      const g = Math.round(0x22 + t * (0x55 - 0x22));
+      const gCol = Math.round(0x22 + t * (0x55 - 0x22));
       const b = Math.round(0x00);
-      frame.fillStyle((r << 16) | (g << 8) | b, 0.85);
-      frame.fillRect(EXIT_X + 5 + s * stripW, EXIT_Y + 5, Math.ceil(stripW), EXIT_HEIGHT - 5);
+      frame.fillStyle((r << 16) | (gCol << 8) | b, 0.85);
+      frame.fillRect(ex.x + 5 + s * stripW, ex.y + 5, Math.ceil(stripW), ex.height - 5);
     }
-    // Threshold line at bottom
     frame.fillStyle(0xffd700, 0.6);
-    frame.fillRect(EXIT_X + 5, EXIT_Y + EXIT_HEIGHT - 2, EXIT_WIDTH - 10, 2);
-    // Arch highlight above door
+    frame.fillRect(ex.x + 5, ex.y + ex.height - 2, ex.width - 10, 2);
     frame.fillStyle(0xffe066, 0.5);
-    frame.fillRoundedRect(EXIT_X + 5, EXIT_Y + 2, EXIT_WIDTH - 10, 4, 2);
+    frame.fillRoundedRect(ex.x + 5, ex.y + 2, ex.width - 10, 4, 2);
 
     this.exitZone = frame;
 
     this.exitLabel = this.add
-      .text(cx, EXIT_Y - 14, 'SORTIE', {
+      .text(cx, ex.y - 14, 'SORTIE', {
         fontSize: '11px',
         color: '#ffd700',
         fontFamily: 'Arial',
@@ -345,17 +327,16 @@ export class GameScene extends Phaser.Scene {
     this.exitGlow.setAlpha(pulse);
     const scalePulse = 1 + Math.sin(this.elapsedTime * EXIT_PULSE_SPEED) * 0.04;
     this.exitGlow.setScale(scalePulse);
-    // Also animate the exit label brightness
     if (this.exitLabel) {
       const labelAlpha = 0.7 + Math.sin(this.elapsedTime * EXIT_PULSE_SPEED) * 0.3;
       this.exitLabel.setAlpha(labelAlpha);
     }
   }
 
-  private isAtExit(x: number, y: number): boolean {
+  private isAtExit(x: number, y: number, exX: number, exY: number, exW: number, exH: number): boolean {
     const TOLERANCE = 2;
-    return x >= EXIT_X && x <= EXIT_X + EXIT_WIDTH &&
-           y >= EXIT_Y - TOLERANCE && y <= EXIT_Y + EXIT_HEIGHT + TOLERANCE;
+    return x >= exX && x <= exX + exW &&
+           y >= exY - TOLERANCE && y <= exY + exH + TOLERANCE;
   }
 
   shutdown(): void { this.cleanUp(); }
