@@ -54,15 +54,19 @@
 
 > Ce flux est au coeur du bug #1 (lemmings ne sortent pas).
 
-### Flux attendu :
-1. `SpawnSystem` cree une zone de sortie (exit) au chargement du niveau
-2. A chaque update, `SpawnSystem` verifie si un lemming chevauche la zone exit
-3. Si oui, le lemming passe en etat `EXITING`
-4. L'etat `EXITING` joue une animation puis transitionne vers `SAVED`
-5. Le compteur de sauves augmente, event `LEMMING_SAVED` emis
+### Flux reel (tel qu'implemente) :
+1. `GameScene.createExitZone()` dessine un rectangle visuel a (865, 435) 30x30
+2. A chaque `GameScene.update()`, boucle sur les lemmings actifs et appelle `isAtExit(x, y)`
+3. `isAtExit` fait un AABB check : `x in [850, 880] && y in [420, 450]`
+4. Si vrai, `lemming.changeState('saved')` → `SavedState.enter()` met `alive=false`
+5. Frame suivante : `lemmingPool.updateAll()` auto-release le lemming (alive=false)
 
-### Bugs trouves :
-<!-- A remplir apres investigation -->
+### Bug trouve (2026-04-09) :
+**Floating-point boundary mismatch dans `snapToSurface`**
+- La gravite donne au lemming un y flottant (ex: 450.7)
+- `snapToSurface(x, 450.7)` teste `checkGround(x, 449.7)` → `Math.floor(449.7-300)=149` → pas solide (terrain commence a localY=150)
+- Le snap echoue : le lemming reste a y=450.7
+- `isAtExit(x, 450.7)` : `450.7 <= 450` → **FALSE** → le lemming traverse la zone sans etre detecte
 
 ---
 
@@ -71,9 +75,13 @@
 ### 2026-04-09 - Fix exit bug
 - **Branche** : `claude/fix-lemming-exit-bug-4gO97`
 - **Probleme** : Les lemmings n'arrivent plus a sortir par la porte exit
-- **Cause racine** : (a determiner)
-- **Fichiers modifies** : (a remplir)
-- **Fix applique** : (a remplir)
+- **Cause racine** : `snapToSurface()` ne floor pas la position Y float du lemming. Resultat : lemming a y=450.7 au lieu de y=450, et le check `y <= 450` de `isAtExit` echoue.
+- **Fichiers modifies** :
+  - `src/systems/PhysicsSystem.ts:105` — `Math.floor(startY)` dans `snapToSurface`
+  - `src/scenes/GameScene.ts:211-213` — tolerance de 2px dans `isAtExit`
+- **Fix applique** :
+  1. **Fix principal** : `snapToSurface` floor `startY` pour snapper les lemmings aux pixels entiers
+  2. **Defense en profondeur** : `isAtExit` ajoute une tolerance de 2px sur l'axe Y
 
 ---
 

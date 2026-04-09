@@ -209,7 +209,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private isAtExit(x: number, y: number): boolean {
-    return x >= EXIT_X && x <= EXIT_X + EXIT_WIDTH && y >= EXIT_Y && y <= EXIT_Y + EXIT_HEIGHT;
+    const TOLERANCE = 2;
+    return x >= EXIT_X && x <= EXIT_X + EXIT_WIDTH &&
+           y >= EXIT_Y - TOLERANCE && y <= EXIT_Y + EXIT_HEIGHT + TOLERANCE;
   }
 
   shutdown(): void { this.cleanUp(); }

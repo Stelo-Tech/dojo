@@ -102,7 +102,7 @@ export class PhysicsSystem {
   }
 
   private snapToSurface(x: number, startY: number): number {
-    let surfaceY = startY;
+    let surfaceY = Math.floor(startY);
     for (let probe = 0; probe < 14; probe++) {
       if (this.checkGround(x, surfaceY - 1)) {
         surfaceY--;
