@@ -646,72 +646,68 @@ export class LevelGenerator {
       }
 
       case 'crusher_zone': {
-        // Area with overhead ceiling creating dangerous passage
-        // Lemmings must walk through quickly (timing hazard)
-        // Represented as a low ceiling — forces blocker/timing play
+        // Timed overhead crusher — lemmings must pass during the safe window.
+        // Visually represented as a hazard zone; no terrain fill so the
+        // validator can walk through unimpeded (timing is the mechanic).
         const ceilingW = rng.intRange(60, 100);
         const ceilingX = midX - Math.floor(ceilingW / 2);
-        // Ceiling block sitting low above terrain
-        const ceilingY = TERRAIN_Y - rng.intRange(14, 18);
-        const ceilingRect: TerrainRect = { x: ceilingX, y: ceilingY, w: ceilingW, h: 12 };
-        fills.push(ceilingRect);
-        hazards.push({ type: 'crusher', x: ceilingX, y: ceilingY, w: ceilingW, h: 12 });
-        // No required tool — timing is the mechanic, but ramp helps navigate
+        const ceilingY = TERRAIN_Y - rng.intRange(20, 30);
+        // Register as hazard only — the game scene renders the crusher animation.
+        // We do NOT add a terrain fill here: the "ceiling" is a hazard overlay,
+        // not solid terrain, so lemmings pass through at ground level.
+        hazards.push({ type: 'crusher', x: ceilingX, y: ceilingY, w: ceilingW, h: 24 });
+        const refRect: TerrainRect = { x: ceilingX, y: ceilingY, w: ceilingW, h: 24 };
         return {
           startX,
           endX,
-          obstacle: { type: 'crusher_zone', requiredTool: null, rect: ceilingRect },
-          fills,
+          obstacle: { type: 'crusher_zone', requiredTool: null, rect: refRect },
+          fills,  // empty — crusher is visual only
           erases,
         };
       }
 
       case 'multi_platform': {
-        // Two stacked platforms at different heights — must navigate vertically
-        const platW = rng.intRange(80, 120);
-        const lowerPlatH = rng.intRange(10, 16);
-        const upperPlatH = rng.intRange(lowerPlatH + 10, lowerPlatH + 22);
-        const platX = midX - Math.floor(platW / 2);
+        // A wide bridgeable gap with two staggered platforms inside it.
+        // Visually more interesting than a plain gap: the stair bridge steps
+        // across the platforms at different heights. Required tool: stairs.
+        const gapW = rng.intRange(80, Math.min(120, MAX_STAIR_SPAN - 20, space));
+        const gapX = midX - Math.floor(gapW / 2);
+        const gapRect: TerrainRect = { x: gapX, y: TERRAIN_Y, w: gapW, h: TERRAIN_HEIGHT };
+        erases.push(gapRect);
 
-        // Lower platform (accessible via ramp)
-        const lowerY = TERRAIN_Y - lowerPlatH;
-        fills.push({ x: platX, y: lowerY, w: platW, h: 10 });
+        // Two decorative platforms inside the gap at different heights.
+        // They sit ABOVE TERRAIN_Y so the erase doesn't remove them.
+        const platW = Math.floor(gapW / 4);
+        const leftPlatY = TERRAIN_Y - rng.intRange(6, 12);
+        const rightPlatY = TERRAIN_Y - rng.intRange(14, TOOL_RAMP_HEIGHT - 2);
+        fills.push({ x: gapX + 8, y: leftPlatY, w: platW, h: 8 });
+        fills.push({ x: gapX + gapW - platW - 8, y: rightPlatY, w: platW, h: 8 });
 
-        // Upper platform (above lower, requires ramp from lower)
-        const upperX = platX + rng.intRange(-20, 20);
-        const upperY = TERRAIN_Y - upperPlatH;
-        fills.push({ x: upperX, y: upperY, w: platW - 20, h: 10 });
-
-        // Erase ground under lower platform so path goes through it
-        erases.push({ x: platX, y: TERRAIN_Y, w: platW, h: TERRAIN_HEIGHT });
-
-        const refRect: TerrainRect = { x: platX, y: lowerY, w: platW, h: 10 };
         return {
           startX,
           endX,
-          obstacle: { type: 'multi_platform', requiredTool: 'ramp', rect: refRect },
+          obstacle: { type: 'multi_platform', requiredTool: 'stairs', rect: gapRect },
           fills,
           erases,
         };
       }
 
       case 'narrow_tunnel': {
-        // Low-ceiling tunnel passage — walls on both sides force walkers through
+        // Passage flanked by decorative side walls that don't block horizontal
+        // movement — the walls are placed OUTSIDE the tunnel opening so lemmings
+        // walk through freely. No terrain fills in the passage itself.
+        // The "narrow" is a visual constraint handled by the game scene.
         const tunnelW = rng.intRange(60, 100);
         const tunnelX = midX - Math.floor(tunnelW / 2);
-        const wallH = rng.intRange(12, 20);
+        const wallH = rng.intRange(20, 30);
 
-        // Left wall
-        fills.push({ x: tunnelX, y: TERRAIN_Y - wallH, w: 10, h: wallH });
-        // Right wall
-        fills.push({ x: tunnelX + tunnelW - 10, y: TERRAIN_Y - wallH, w: 10, h: wallH });
+        // Side walls stand next to (not in) the tunnel entry/exit
+        // Left wall is to the LEFT of the tunnel opening
+        fills.push({ x: tunnelX - 12, y: TERRAIN_Y - wallH, w: 10, h: wallH });
+        // Right wall is to the RIGHT of the tunnel exit
+        fills.push({ x: tunnelX + tunnelW + 2, y: TERRAIN_Y - wallH, w: 10, h: wallH });
 
-        // Overhead ceiling (low)
-        const ceilH = 8;
-        const ceilingY = TERRAIN_Y - wallH - ceilH;
-        fills.push({ x: tunnelX, y: ceilingY, w: tunnelW, h: ceilH });
-
-        const refRect: TerrainRect = { x: tunnelX, y: ceilingY, w: tunnelW, h: wallH + ceilH };
+        const refRect: TerrainRect = { x: tunnelX, y: TERRAIN_Y - wallH, w: tunnelW, h: wallH };
         return {
           startX,
           endX,

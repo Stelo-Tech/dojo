@@ -193,14 +193,16 @@ describe('LevelGenerator — new obstacle types', () => {
     expect(crusherSeg?.obstacle.requiredTool).toBeNull();
   });
 
-  it('multi_platform creates multiple fill rects (lower + upper platforms)', () => {
+  it('multi_platform creates a gap erase and staggered platform fills', () => {
     const config = configWithObstacle(4, 'multi_platform');
     const level = generator.generate(config, 42);
     const multiSeg = level.segments.find((s) => s.obstacle.type === 'multi_platform');
     expect(multiSeg).toBeDefined();
-    // Expect at least 2 fills (lower + upper platform)
+    // Expect 2 fills (the two staggered platforms inside the gap)
     expect((multiSeg?.fills.length ?? 0)).toBeGreaterThanOrEqual(2);
-    expect(multiSeg?.obstacle.requiredTool).toBe('ramp');
+    // Gap erase present
+    expect(multiSeg?.erases.length).toBeGreaterThan(0);
+    expect(multiSeg?.obstacle.requiredTool).toBe('stairs');
   });
 
   it('narrow_tunnel places ceiling and side walls (multiple fills)', () => {
