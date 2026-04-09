@@ -102,21 +102,42 @@
   - `src/utils/Constants.ts` : nouvelles couleurs (terrain biome, palette amelioree, 60 etoiles)
   - `src/systems/TerrainSystem.ts` : terrain multi-couche (herbe, highlight, terre, ombre profonde) + dithering Bayer 4x4
   - `src/entities/Lemming.ts` : sprite multi-parties (torse, tete, cheveux, yeux, jambes animees)
-  - `src/scenes/GameScene.ts` : background gradient, etoiles scintillantes, portail spawn, exit zone amelioree
+  - `src/scenes/GameScene.ts` : background gradient, etoiles scintillantes, portail spawn, exit zone amelioree (porte en bois)
+
+### 2026-04-09 - Redesign HUD + UX placement
+- **Probleme** : Boutons sur la carte de jeu, labels anglais, placement d'outils galere
+- **Fichiers modifies** :
+  - `src/utils/Constants.ts` : ajout `HUD_BAR_HEIGHT=70`, `HUD_BAR_Y`, labels francais (`Creuser`, `Escalier`, `Mur`, `Rampe`)
+  - `src/ui/HUD.ts` : rewrite complet — barre sombre dediee en bas, boutons avec coins arrondis, icones procedurales (pioche, marches, briques, triangle), compteurs `xN`, status en francais
+  - `src/ui/TouchControls.ts` : exclusion zone HUD (`isInHudBar`), preview fantome qui suit le curseur (contour de l'outil avant placement), chaque outil a sa preview (rectangle rouge pour dig, marches bleues pour stairs, etc.)
+  - `src/scenes/GameScene.ts` : labels francais (SORTIE, ENTREE)
 
 ---
 
 ## Notes techniques
 
-### FSM Lemming (etats)
-- WALKER, FALLER, DIGGER, BUILDER, BASHER, CLIMBER, FLOATER, BLOCKER, BOMBER, EXITING, DEAD, SAVED
-- Transitions valides definies dans `VALID_TRANSITIONS` (LemmingStates.ts)
+### FSM Lemming (etats actuels)
+- walker, faller, dead, saved (4 etats implementes)
+- Transitions gerees par `Lemming.changeState()` avec guard de re-entrance (`changingState` + `pendingState`)
+- Chute fatale : `FallerState.exit()` → si `fallDistance > 60` → `changeState('dead')`
 
 ### EventBus (evenements cles)
-- `LEMMING_SAVED`, `LEMMING_DIED`, `LEMMING_SPAWNED`, `LEVEL_COMPLETE`
-- `SKILL_ASSIGNED`, `EXIT_REACHED`
+- `lemming:saved`, `lemming:died`, `lemming:stateChanged`
+- `hud:update`, `tool:selected`, `tool:placed`, `tool:counts`
 
-### Constantes importantes
-- `EXIT_ZONE_WIDTH`, `EXIT_ZONE_HEIGHT` : taille zone de detection sortie
-- `WALK_SPEED = 30`, `FATAL_FALL_DISTANCE = 80`
-- `SPAWN_INTERVAL = 1000ms`
+### HUD Layout
+- Barre dediee : y=470 a y=540 (70px de haut), fond sombre `#111827`
+- 4 boutons centres : Creuser, Escalier, Mur, Rampe
+- Status en haut a gauche de la barre : `Vivants: X | Sauves: X | Morts: X`
+- Touch exclusion : clicks y >= HUD_BAR_Y ignores par TouchControls
+
+### Tool Placement Preview
+- Ghost graphique suit le curseur quand un outil est selectionne
+- Disparait dans zone HUD ou zone exit
+- Dig : rectangle rouge avec croix, Stairs : marches bleues, Wall : rectangle bleu, Ramp : triangle bleu
+
+### Constantes cles
+- `EXIT_X=850, EXIT_Y=420, EXIT_WIDTH=30, EXIT_HEIGHT=30`
+- `HUD_BAR_Y=470, HUD_BAR_HEIGHT=70`
+- `LEMMING_SPEED=40`, `LEMMING_FALL_DISTANCE=60`, `GRAVITY=300`
+- `SPAWN_INTERVAL=1000ms`, `SPAWN_X=100`, `SPAWN_Y=370`

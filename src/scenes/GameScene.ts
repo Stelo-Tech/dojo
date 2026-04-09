@@ -20,7 +20,6 @@ import {
   EXIT_PLATFORM,
   SPAWN_PORTAL_WIDTH,
   SPAWN_PORTAL_HEIGHT,
-  SPAWN_PORTAL_COLOR,
   EXIT_PULSE_SPEED,
 } from '@/utils/Constants';
 import { gameEventBus } from '@/utils/EventBus';
@@ -276,7 +275,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.spawnLabel = this.add
-      .text(portalX, portalY - ph * 0.5 - 12, 'SPAWN', {
+      .text(portalX, portalY - ph * 0.5 - 12, 'ENTREE', {
         fontSize: '10px',
         color: '#88bbff',
         fontFamily: 'Arial',
@@ -327,7 +326,7 @@ export class GameScene extends Phaser.Scene {
     this.exitZone = frame;
 
     this.exitLabel = this.add
-      .text(cx, EXIT_Y - 14, 'EXIT', {
+      .text(cx, EXIT_Y - 14, 'SORTIE', {
         fontSize: '11px',
         color: '#ffd700',
         fontFamily: 'Arial',
@@ -374,12 +373,8 @@ export class GameScene extends Phaser.Scene {
     if (this.exitLabel) { this.exitLabel.destroy(); this.exitLabel = null; }
     if (this.spawnPortal) { this.spawnPortal.destroy(); this.spawnPortal = null; }
     if (this.spawnLabel) { this.spawnLabel.destroy(); this.spawnLabel = null; }
-    if (this.spawnTriangle) { this.spawnTriangle.destroy(); this.spawnTriangle = null; }
-    for (const layer of this.bgLayers) { layer.destroy(); }
-    this.bgLayers.length = 0;
+    if (this.bgGraphics) { this.bgGraphics.destroy(); this.bgGraphics = null; }
     for (const star of this.starGraphics) { star.destroy(); }
     this.starGraphics.length = 0;
-    for (const line of this.gridLines) { line.destroy(); }
-    this.gridLines.length = 0;
   }
 }

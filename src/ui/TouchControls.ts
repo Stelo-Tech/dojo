@@ -19,6 +19,7 @@ import {
   EXIT_Y,
   EXIT_WIDTH,
   EXIT_HEIGHT,
+  HUD_BAR_Y,
 } from '@/utils/Constants';
 
 export class TouchControls {
@@ -27,6 +28,10 @@ export class TouchControls {
   private readonly terrain: TerrainSystem;
   private readonly flashPool: Phaser.GameObjects.Rectangle[] = [];
   private readonly onPointerDownBound: (pointer: Phaser.Input.Pointer) => void;
+  private readonly onPointerMoveBound: (pointer: Phaser.Input.Pointer) => void;
+
+  /** Preview ghost graphics */
+  private preview: Phaser.GameObjects.Graphics;
 
   constructor(scene: Phaser.Scene, hud: HUD, terrain: TerrainSystem) {
     this.scene = scene;
@@ -41,10 +46,16 @@ export class TouchControls {
       this.flashPool.push(flash);
     }
 
+    this.preview = scene.add.graphics().setDepth(180).setAlpha(0.4);
+
     this.onPointerDownBound = (pointer: Phaser.Input.Pointer) => {
       this.onPointerDown(pointer);
     };
+    this.onPointerMoveBound = (pointer: Phaser.Input.Pointer) => {
+      this.onPointerMove(pointer);
+    };
     this.scene.input.on('pointerdown', this.onPointerDownBound);
+    this.scene.input.on('pointermove', this.onPointerMoveBound);
   }
 
   private isInExitZone(x: number, y: number): boolean {
@@ -53,10 +64,75 @@ export class TouchControls {
            y >= EXIT_Y - margin && y <= EXIT_Y + EXIT_HEIGHT + margin;
   }
 
+  private isInHudBar(y: number): boolean {
+    return y >= HUD_BAR_Y;
+  }
+
+  private onPointerMove(pointer: Phaser.Input.Pointer): void {
+    const worldX = pointer.worldX;
+    const worldY = pointer.worldY;
+    const tool = this.hud.getSelectedTool();
+
+    this.preview.clear();
+
+    if (!tool) return;
+    if (this.isInHudBar(worldY)) return;
+    if (this.isInExitZone(worldX, worldY)) return;
+
+    this.drawPreview(tool, worldX, worldY);
+  }
+
+  private drawPreview(tool: ToolType, worldX: number, worldY: number): void {
+    const g = this.preview;
+    const previewColor = 0x66aaff;
+
+    switch (tool) {
+      case 'dig':
+        g.lineStyle(2, 0xff6644, 0.7);
+        g.strokeRect(worldX - TOOL_DIG_WIDTH / 2, worldY, TOOL_DIG_WIDTH, TOOL_DIG_DEPTH);
+        // Cross lines to indicate destruction
+        g.lineBetween(worldX - TOOL_DIG_WIDTH / 2, worldY, worldX + TOOL_DIG_WIDTH / 2, worldY + TOOL_DIG_DEPTH);
+        g.lineBetween(worldX + TOOL_DIG_WIDTH / 2, worldY, worldX - TOOL_DIG_WIDTH / 2, worldY + TOOL_DIG_DEPTH);
+        break;
+      case 'stairs': {
+        const direction = worldX < GAME_WIDTH / 2 ? 1 : -1;
+        g.fillStyle(previewColor, 0.3);
+        g.lineStyle(1, previewColor, 0.6);
+        for (let step = 0; step < TOOL_STAIR_STEPS; step++) {
+          const stepX = direction === 1
+            ? worldX + step * TOOL_STAIR_STEP_W
+            : worldX - (step + 1) * TOOL_STAIR_STEP_W;
+          const stepY = worldY - (step + 1) * TOOL_STAIR_STEP_H;
+          g.fillRect(stepX, stepY, TOOL_STAIR_STEP_W, TOOL_STAIR_STEP_H);
+          g.strokeRect(stepX, stepY, TOOL_STAIR_STEP_W, TOOL_STAIR_STEP_H);
+        }
+        break;
+      }
+      case 'wall':
+        g.fillStyle(previewColor, 0.3);
+        g.lineStyle(2, previewColor, 0.6);
+        g.fillRect(worldX - TOOL_WALL_WIDTH / 2, worldY - TOOL_WALL_HEIGHT, TOOL_WALL_WIDTH, TOOL_WALL_HEIGHT);
+        g.strokeRect(worldX - TOOL_WALL_WIDTH / 2, worldY - TOOL_WALL_HEIGHT, TOOL_WALL_WIDTH, TOOL_WALL_HEIGHT);
+        break;
+      case 'ramp': {
+        const dir = worldX < GAME_WIDTH / 2 ? 1 : -1;
+        g.fillStyle(previewColor, 0.3);
+        if (dir === 1) {
+          g.fillTriangle(worldX, worldY, worldX + TOOL_RAMP_LENGTH, worldY, worldX + TOOL_RAMP_LENGTH, worldY - TOOL_RAMP_HEIGHT);
+        } else {
+          g.fillTriangle(worldX, worldY, worldX - TOOL_RAMP_LENGTH, worldY, worldX - TOOL_RAMP_LENGTH, worldY - TOOL_RAMP_HEIGHT);
+        }
+        break;
+      }
+    }
+  }
+
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
     const worldX = pointer.worldX;
     const worldY = pointer.worldY;
 
+    // Ignore clicks in the HUD bar or exit zone
+    if (this.isInHudBar(worldY)) return;
     if (this.isInExitZone(worldX, worldY)) return;
 
     const selectedTool = this.hud.getSelectedTool();
@@ -151,6 +227,8 @@ export class TouchControls {
 
   destroy(): void {
     this.scene.input.off('pointerdown', this.onPointerDownBound);
+    this.scene.input.off('pointermove', this.onPointerMoveBound);
+    this.preview.destroy();
     for (const flash of this.flashPool) {
       flash.destroy();
     }

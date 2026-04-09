@@ -102,10 +102,14 @@ export const TERRAIN_MID_COLOR = 0x8b5e2a;      // dirt body
 export const TERRAIN_DEEP_COLOR = 0x5c3510;     // deep shadow
 export const TERRAIN_HIGHLIGHT_COLOR = 0xa06b30; // upper highlight
 
+/** HUD bar at bottom of screen */
+export const HUD_BAR_HEIGHT = 70;
+export const HUD_BAR_Y = GAME_HEIGHT - HUD_BAR_HEIGHT;
+
 /** HUD button dimensions */
-export const HUD_BUTTON_WIDTH = 100;
-export const HUD_BUTTON_HEIGHT = 50;
-export const HUD_BUTTON_GAP = 12;
+export const HUD_BUTTON_WIDTH = 90;
+export const HUD_BUTTON_HEIGHT = 46;
+export const HUD_BUTTON_GAP = 14;
 
 /** Tool icon color mapping */
 export const TOOL_ICON_COLORS: Readonly<Record<ToolType, number>> = {
@@ -115,12 +119,20 @@ export const TOOL_ICON_COLORS: Readonly<Record<ToolType, number>> = {
   ramp: 0xff00ff,
 };
 
-/** Tool display labels */
+/** Tool display labels (French) */
 export const TOOL_LABELS: Readonly<Record<ToolType, string>> = {
-  dig: 'Dig',
-  stairs: 'Stairs',
-  wall: 'Wall',
-  ramp: 'Ramp',
+  dig: 'Creuser',
+  stairs: 'Escalier',
+  wall: 'Mur',
+  ramp: 'Rampe',
+};
+
+/** Tool descriptions for tooltip (French) */
+export const TOOL_DESCRIPTIONS: Readonly<Record<ToolType, string>> = {
+  dig: 'Creuse un trou',
+  stairs: 'Pose un escalier',
+  wall: 'Place un mur',
+  ramp: 'Construit une pente',
 };
 
 /** Wall terrain color (darker than normal terrain) */
