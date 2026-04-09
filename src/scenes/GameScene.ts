@@ -287,17 +287,69 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createExitZone(): void {
-    this.exitGlow = this.add.rectangle(EXIT_X + EXIT_WIDTH / 2, EXIT_Y + EXIT_HEIGHT / 2, EXIT_WIDTH + 10, EXIT_HEIGHT + 10, 0x00ff00, 0.15).setDepth(49);
-    this.exitZone = this.add.rectangle(EXIT_X + EXIT_WIDTH / 2, EXIT_Y + EXIT_HEIGHT / 2, EXIT_WIDTH, EXIT_HEIGHT, 0x00ff00, 0.5).setDepth(50);
-    this.exitLabel = this.add.text(EXIT_X + EXIT_WIDTH / 2, EXIT_Y - 12, 'EXIT', { fontSize: '14px', color: '#00ff00', fontFamily: 'Arial', fontStyle: 'bold' }).setOrigin(0.5).setDepth(50);
+    const cx = EXIT_X + EXIT_WIDTH / 2;
+    const cy = EXIT_Y + EXIT_HEIGHT / 2;
+
+    // Outer glow halo — soft warm gold
+    const halo = this.add.graphics().setDepth(49);
+    halo.fillStyle(0xffd700, 0.12);
+    halo.fillRoundedRect(EXIT_X - 8, EXIT_Y - 8, EXIT_WIDTH + 16, EXIT_HEIGHT + 16, 8);
+    this.exitGlow = halo;
+
+    // Door frame — two pillars + lintel
+    const frame = this.add.graphics().setDepth(50);
+    // Left pillar
+    frame.fillStyle(0x8b7355, 1);
+    frame.fillRect(EXIT_X, EXIT_Y, 5, EXIT_HEIGHT);
+    // Right pillar
+    frame.fillRect(EXIT_X + EXIT_WIDTH - 5, EXIT_Y, 5, EXIT_HEIGHT);
+    // Lintel (top bar)
+    frame.fillStyle(0x6b5635, 1);
+    frame.fillRect(EXIT_X, EXIT_Y, EXIT_WIDTH, 5);
+    // Door interior — warm amber with gradient strips
+    const stripCount = 6;
+    const stripW = (EXIT_WIDTH - 10) / stripCount;
+    for (let s = 0; s < stripCount; s++) {
+      const t = s / (stripCount - 1);
+      const r = Math.round(0x33 + t * (0x88 - 0x33));
+      const g = Math.round(0x22 + t * (0x55 - 0x22));
+      const b = Math.round(0x00);
+      frame.fillStyle((r << 16) | (g << 8) | b, 0.85);
+      frame.fillRect(EXIT_X + 5 + s * stripW, EXIT_Y + 5, Math.ceil(stripW), EXIT_HEIGHT - 5);
+    }
+    // Threshold line at bottom
+    frame.fillStyle(0xffd700, 0.6);
+    frame.fillRect(EXIT_X + 5, EXIT_Y + EXIT_HEIGHT - 2, EXIT_WIDTH - 10, 2);
+    // Arch highlight above door
+    frame.fillStyle(0xffe066, 0.5);
+    frame.fillRoundedRect(EXIT_X + 5, EXIT_Y + 2, EXIT_WIDTH - 10, 4, 2);
+
+    this.exitZone = frame;
+
+    this.exitLabel = this.add
+      .text(cx, EXIT_Y - 14, 'EXIT', {
+        fontSize: '11px',
+        color: '#ffd700',
+        fontFamily: 'Arial',
+        fontStyle: 'bold',
+        stroke: '#3a2800',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(51);
   }
 
   private animateExit(): void {
     if (!this.exitGlow) return;
-    const pulse = 0.225 + Math.sin(this.elapsedTime * EXIT_PULSE_SPEED) * 0.125;
+    const pulse = 0.18 + Math.sin(this.elapsedTime * EXIT_PULSE_SPEED) * 0.12;
     this.exitGlow.setAlpha(pulse);
-    const scalePulse = 1 + Math.sin(this.elapsedTime * EXIT_PULSE_SPEED) * 0.05;
+    const scalePulse = 1 + Math.sin(this.elapsedTime * EXIT_PULSE_SPEED) * 0.04;
     this.exitGlow.setScale(scalePulse);
+    // Also animate the exit label brightness
+    if (this.exitLabel) {
+      const labelAlpha = 0.7 + Math.sin(this.elapsedTime * EXIT_PULSE_SPEED) * 0.3;
+      this.exitLabel.setAlpha(labelAlpha);
+    }
   }
 
   private isAtExit(x: number, y: number): boolean {
