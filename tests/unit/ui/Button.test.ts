@@ -42,15 +42,27 @@ vi.mock('phaser', () => {
       this.scaleY = s;
       return this;
     });
-    off = vi.fn().mockReturnThis();
-    destroy = vi.fn();
-
+    // NOTE: off and destroy must be prototype methods (not instance fields) so
+    // that Button's own destroy() override is not shadowed by an instance-level
+    // vi.fn(). Instance fields (defined with '= vi.fn()') are set as own
+    // properties in the constructor, which would override prototype methods
+    // defined on Button. Using prototype methods avoids that shadow.
+    // We attach vi.fn() spies to the prototype after class declaration (below).
     on(event: string, handler: (this: MockContainer) => void): this {
       if (!this._eventHandlers.has(event)) {
         this._eventHandlers.set(event, []);
       }
       this._eventHandlers.get(event)?.push(handler);
       return this;
+    }
+
+    off(_event: string, _handler: unknown, _ctx?: unknown): this {
+      return this;
+    }
+
+    // Base destroy — called via super.destroy(true) from Button.destroy()
+    destroy(_fromScene?: boolean): void {
+      // no-op in mock
     }
 
     /** Helper for tests: trigger a pointer event */
@@ -285,12 +297,15 @@ describe('Button', () => {
     const scene = await getMockScene();
     const btn = new Button(scene as never, defaultConfig());
 
+    // Spy on the prototype off method — instance fields cannot be spied this way,
+    // but since off is a prototype method on our MockContainer the spy works.
+    const offSpy = vi.spyOn(btn, 'off');
     btn.destroy();
 
-    expect(btn.off).toHaveBeenCalledWith('pointerover', expect.any(Function), btn);
-    expect(btn.off).toHaveBeenCalledWith('pointerout', expect.any(Function), btn);
-    expect(btn.off).toHaveBeenCalledWith('pointerdown', expect.any(Function), btn);
-    expect(btn.off).toHaveBeenCalledWith('pointerup', expect.any(Function), btn);
+    expect(offSpy).toHaveBeenCalledWith('pointerover', expect.any(Function), btn);
+    expect(offSpy).toHaveBeenCalledWith('pointerout', expect.any(Function), btn);
+    expect(offSpy).toHaveBeenCalledWith('pointerdown', expect.any(Function), btn);
+    expect(offSpy).toHaveBeenCalledWith('pointerup', expect.any(Function), btn);
   });
 });
 
