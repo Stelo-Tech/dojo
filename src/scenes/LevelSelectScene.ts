@@ -4,14 +4,16 @@ import { LevelGenerator, DIFFICULTY_PRESETS } from '@/levels/LevelGenerator';
 import { LevelValidator } from '@/levels/LevelValidator';
 import { DifficultyConfig } from '@/levels/LevelData';
 
-const TIERS = 5;
 const LEVELS_PER_TIER = 6;
 
-const TIER_NAMES = ['Tutoriel', 'Facile', 'Normal', 'Difficile', 'Expert'];
-const TIER_COLORS = [0x44dd66, 0x55bbff, 0xffcc22, 0xff8844, 0xff4444];
-const TIER_ICONS = ['?', '~', '!', '!!', '!!!'];
+const TIERS = [
+  { name: 'Tutoriel', color: 0x4ade80, lemmings: 10 },
+  { name: 'Facile',   color: 0x60a5fa, lemmings: 15 },
+  { name: 'Normal',   color: 0xfbbf24, lemmings: 20 },
+  { name: 'Difficile', color: 0xf97316, lemmings: 25 },
+  { name: 'Expert',   color: 0xef4444, lemmings: 30 },
+];
 
-/** Load star progress from localStorage */
 function loadProgress(): Record<string, number> {
   try {
     const raw = localStorage.getItem('lemmings_progress');
@@ -20,7 +22,6 @@ function loadProgress(): Record<string, number> {
   return {};
 }
 
-/** Save star progress */
 export function saveProgress(levelKey: string, stars: number): void {
   const progress = loadProgress();
   const current = progress[levelKey] ?? 0;
@@ -38,128 +39,150 @@ export class LevelSelectScene extends Phaser.Scene {
   create(): void {
     const progress = loadProgress();
 
-    // Background gradient
-    const bg = this.add.graphics().setDepth(0);
-    bg.fillStyle(0x080c18, 1);
-    bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    bg.fillStyle(0x0d1530, 0.6);
-    bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT / 2);
+    // Background
+    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0f172a).setDepth(0);
 
-    // Title
-    this.add.text(GAME_WIDTH / 2, 28, 'CHOISIR UN NIVEAU', {
-      fontSize: '20px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(1);
+    // Scrollable content area — we build everything in a container
+    const contentY = 8;
 
-    // Grid layout
-    const marginLeft = 30;
-    const labelW = 85;
-    const cardW = 68;
-    const cardH = 62;
-    const cardGapX = 8;
-    const cardGapY = 6;
-    const startY = 58;
-    const rowH = cardH + cardGapY + 18; // card + gap + tier label space
+    // Title bar
+    this.add.rectangle(GAME_WIDTH / 2, contentY + 20, GAME_WIDTH - 40, 36, 0x1e293b, 0.8)
+      .setDepth(1);
+    this.add.text(GAME_WIDTH / 2, contentY + 20, 'Niveaux', {
+      fontSize: '18px', color: '#e2e8f0', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(2);
 
-    for (let tier = 0; tier < TIERS; tier++) {
-      const tierColor = TIER_COLORS[tier] ?? 0xffffff;
-      const tierName = TIER_NAMES[tier] ?? '';
-      const colorHex = `#${tierColor.toString(16).padStart(6, '0')}`;
-      const rowY = startY + tier * rowH;
+    // Layout: horizontal scrollable tiers
+    const tierStartY = contentY + 52;
+    const tierH = 80;
+    const tierGap = 6;
 
-      // Tier label + icon
-      this.add.text(marginLeft, rowY + cardH / 2, tierName, {
-        fontSize: '13px', color: colorHex, fontFamily: 'Arial', fontStyle: 'bold',
-      }).setOrigin(0, 0.5).setDepth(1);
+    for (let t = 0; t < TIERS.length; t++) {
+      const tier = TIERS[t];
+      if (!tier) continue;
+      const rowY = tierStartY + t * (tierH + tierGap);
 
-      // Tier difficulty dots
-      const dots = TIER_ICONS[tier] ?? '';
-      this.add.text(marginLeft, rowY + cardH / 2 + 14, dots, {
-        fontSize: '10px', color: colorHex, fontFamily: 'Arial',
-      }).setOrigin(0, 0.5).setDepth(1).setAlpha(0.6);
-
-      // Level cards
-      for (let lvl = 0; lvl < LEVELS_PER_TIER; lvl++) {
-        const cx = marginLeft + labelW + lvl * (cardW + cardGapX);
-        const cy = rowY;
-        const seed = (tier + 1) * 1000 + lvl;
-        const levelKey = `${tier + 1}-${seed}`;
-        const starCount = progress[levelKey] ?? 0;
-
-        this.createLevelCard(cx, cy, cardW, cardH, lvl + 1, starCount, tierColor, tier + 1, seed);
-      }
+      this.buildTierRow(t + 1, tier.name, tier.color, tier.lemmings, rowY, tierH, progress);
     }
 
-    // Random button at bottom
-    const randY = startY + TIERS * rowH + 4;
-    this.createRandomButton(randY);
+    // Bottom: random button
+    const bottomY = tierStartY + TIERS.length * (tierH + tierGap) + 4;
+    this.buildRandomButton(bottomY);
   }
 
-  private createLevelCard(
+  private buildTierRow(
+    tierNum: number, name: string, color: number, lemmings: number,
+    y: number, h: number, progress: Record<string, number>,
+  ): void {
+    const colorHex = `#${color.toString(16).padStart(6, '0')}`;
+
+    // Row background
+    const rowBg = this.add.graphics().setDepth(1);
+    rowBg.fillStyle(0x1e293b, 0.5);
+    rowBg.fillRoundedRect(16, y, GAME_WIDTH - 32, h, 10);
+
+    // Tier label (left side)
+    const labelX = 30;
+    this.add.text(labelX, y + 16, name, {
+      fontSize: '14px', color: colorHex, fontFamily: 'Arial', fontStyle: 'bold',
+    }).setDepth(2);
+
+    // Sub info
+    this.add.text(labelX, y + 36, `${lemmings} lemmings`, {
+      fontSize: '10px', color: '#64748b', fontFamily: 'Arial',
+    }).setDepth(2);
+
+    // Total stars for this tier
+    let totalStars = 0;
+    const maxStars = LEVELS_PER_TIER * 3;
+    for (let lvl = 0; lvl < LEVELS_PER_TIER; lvl++) {
+      const seed = tierNum * 1000 + lvl;
+      totalStars += progress[`${tierNum}-${seed}`] ?? 0;
+    }
+    this.drawMiniStar(labelX + 4, y + 56, 5, true);
+    this.add.text(labelX + 14, y + 56, `${totalStars}/${maxStars}`, {
+      fontSize: '10px', color: '#94a3b8', fontFamily: 'Arial',
+    }).setOrigin(0, 0.5).setDepth(2);
+
+    // Level cards (right side)
+    const cardsStartX = 120;
+    const cardW = 58;
+    const cardH = h - 12;
+    const cardGap = 8;
+
+    for (let lvl = 0; lvl < LEVELS_PER_TIER; lvl++) {
+      const cx = cardsStartX + lvl * (cardW + cardGap);
+      const cy = y + 6;
+      const seed = tierNum * 1000 + lvl;
+      const levelKey = `${tierNum}-${seed}`;
+      const stars = progress[levelKey] ?? 0;
+
+      this.buildCard(cx, cy, cardW, cardH, lvl + 1, stars, color, tierNum, seed);
+    }
+  }
+
+  private buildCard(
     x: number, y: number, w: number, h: number,
     num: number, stars: number, color: number, tier: number, seed: number,
   ): void {
-    const g = this.add.graphics().setDepth(1);
+    const g = this.add.graphics().setDepth(2);
+    const completed = stars > 0;
 
-    // Card background
-    g.fillStyle(0x141e30, 1);
-    g.fillRoundedRect(x, y, w, h, 8);
+    // Card body
+    g.fillStyle(completed ? 0x1e3a5f : 0x0f1729, 1);
+    g.fillRoundedRect(x, y, w, h, 6);
+    g.lineStyle(1.5, color, completed ? 0.7 : 0.25);
+    g.strokeRoundedRect(x, y, w, h, 6);
 
-    // Subtle border
-    g.lineStyle(1.5, color, stars > 0 ? 0.8 : 0.3);
-    g.strokeRoundedRect(x, y, w, h, 8);
-
-    // Completed indicator — subtle top accent
-    if (stars > 0) {
-      g.fillStyle(color, 0.1);
-      g.fillRoundedRect(x + 1, y + 1, w - 2, 16, { tl: 7, tr: 7, bl: 0, br: 0 });
+    // Completion accent line at top
+    if (completed) {
+      g.fillStyle(color, 0.4);
+      g.fillRect(x + 4, y + 2, w - 8, 2);
     }
 
     // Level number
-    this.add.text(x + w / 2, y + 18, `${num}`, {
-      fontSize: '18px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(2);
+    this.add.text(x + w / 2, y + h / 2 - 8, `${num}`, {
+      fontSize: '20px', color: completed ? '#ffffff' : '#94a3b8',
+      fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(3);
 
-    // 3 mini stars
-    const starY = y + h - 14;
-    const starGap = 14;
+    // 3 mini stars at bottom of card
+    const starY = y + h - 12;
+    const starGap = 12;
     const starStartX = x + w / 2 - starGap;
     for (let s = 0; s < 3; s++) {
-      const sx = starStartX + s * starGap;
-      this.drawMiniStar(sx, starY, 5, s < stars);
+      this.drawMiniStar(starStartX + s * starGap, starY, 4, s < stars);
     }
 
-    // Interactive zone
+    // Interactive
     const zone = this.add.zone(x + w / 2, y + h / 2, w, h)
-      .setInteractive({ useHandCursor: true })
-      .setDepth(3);
+      .setInteractive({ useHandCursor: true }).setDepth(4);
 
     zone.on('pointerover', () => {
       g.clear();
-      g.fillStyle(0x1a2a44, 1);
-      g.fillRoundedRect(x, y, w, h, 8);
+      g.fillStyle(0x233a5a, 1);
+      g.fillRoundedRect(x, y, w, h, 6);
       g.lineStyle(2, color, 0.9);
-      g.strokeRoundedRect(x, y, w, h, 8);
+      g.strokeRoundedRect(x, y, w, h, 6);
     });
 
     zone.on('pointerout', () => {
       g.clear();
-      g.fillStyle(0x141e30, 1);
-      g.fillRoundedRect(x, y, w, h, 8);
-      g.lineStyle(1.5, color, stars > 0 ? 0.8 : 0.3);
-      g.strokeRoundedRect(x, y, w, h, 8);
-      if (stars > 0) {
-        g.fillStyle(color, 0.1);
-        g.fillRoundedRect(x + 1, y + 1, w - 2, 16, { tl: 7, tr: 7, bl: 0, br: 0 });
+      g.fillStyle(completed ? 0x1e3a5f : 0x0f1729, 1);
+      g.fillRoundedRect(x, y, w, h, 6);
+      g.lineStyle(1.5, color, completed ? 0.7 : 0.25);
+      g.strokeRoundedRect(x, y, w, h, 6);
+      if (completed) {
+        g.fillStyle(color, 0.4);
+        g.fillRect(x + 4, y + 2, w - 8, 2);
       }
     });
 
-    zone.on('pointerdown', () => {
-      this.launchLevel(tier, seed);
-    });
+    zone.on('pointerdown', () => { this.launchLevel(tier, seed); });
   }
 
   private drawMiniStar(cx: number, cy: number, r: number, filled: boolean): void {
-    const g = this.add.graphics().setDepth(2);
+    const g = this.add.graphics().setDepth(3);
     const innerR = r * 0.4;
     const pts: { x: number; y: number }[] = [];
     for (let i = 0; i < 10; i++) {
@@ -167,36 +190,30 @@ export class LevelSelectScene extends Phaser.Scene {
       const radius = i % 2 === 0 ? r : innerR;
       pts.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
     }
-    if (filled) {
-      g.fillStyle(0xffd700, 1);
-    } else {
-      g.fillStyle(0x2a3040, 1);
-    }
+    g.fillStyle(filled ? 0xfbbf24 : 0x334155, 1);
     g.fillPoints(pts, true);
   }
 
-  private createRandomButton(y: number): void {
-    const bw = 220;
-    const bh = 40;
+  private buildRandomButton(y: number): void {
+    const bw = 200;
+    const bh = 36;
     const bx = GAME_WIDTH / 2 - bw / 2;
 
     const g = this.add.graphics().setDepth(1);
-    g.fillStyle(0x1a2a44, 1);
-    g.fillRoundedRect(bx, y, bw, bh, 10);
-    g.lineStyle(1.5, 0x4488cc, 0.7);
-    g.strokeRoundedRect(bx, y, bw, bh, 10);
+    g.fillStyle(0x1e293b, 1);
+    g.fillRoundedRect(bx, y, bw, bh, 8);
+    g.lineStyle(1.5, 0x3b82f6, 0.6);
+    g.strokeRoundedRect(bx, y, bw, bh, 8);
 
-    this.add.text(GAME_WIDTH / 2, y + bh / 2, 'NIVEAU ALEATOIRE', {
-      fontSize: '13px', color: '#66aaff', fontFamily: 'Arial', fontStyle: 'bold',
+    this.add.text(GAME_WIDTH / 2, y + bh / 2, 'Niveau aleatoire', {
+      fontSize: '13px', color: '#60a5fa', fontFamily: 'Arial', fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(2);
 
     const zone = this.add.zone(GAME_WIDTH / 2, y + bh / 2, bw, bh)
-      .setInteractive({ useHandCursor: true })
-      .setDepth(3);
+      .setInteractive({ useHandCursor: true }).setDepth(3);
 
     zone.on('pointerdown', () => {
-      const tier = Phaser.Math.Between(1, 5);
-      this.launchLevel(tier, Date.now());
+      this.launchLevel(Phaser.Math.Between(1, 5), Date.now());
     });
   }
 
