@@ -54,6 +54,8 @@ export class GameScene extends Phaser.Scene {
     this.savedCount = 0;
     this.deadCount = 0;
     this.elapsedTime = 0;
+    this.levelEnded = false;
+    this.endDelay = 0;
 
     // Get or generate level data
     if (data?.levelData) {
@@ -90,6 +92,10 @@ export class GameScene extends Phaser.Scene {
       this.deadCount++;
     };
     gameEventBus.on('lemming:died', this.diedHandler);
+
+    // Register cleanup on Phaser scene lifecycle events
+    this.events.once('shutdown', this.cleanUp, this);
+    this.events.once('destroy', this.cleanUp, this);
   }
 
   /** Generate a level and validate it. Retry with different seeds if invalid. */
@@ -364,10 +370,13 @@ export class GameScene extends Phaser.Scene {
            y >= exY - TOLERANCE && y <= exY + exH + TOLERANCE;
   }
 
-  shutdown(): void { this.cleanUp(); }
-  destroy(): void { this.cleanUp(); }
-
   private cleanUp(): void {
+    // Remove lifecycle listeners to avoid double-cleanup
+    this.events.off('shutdown', this.cleanUp, this);
+    this.events.off('destroy', this.cleanUp, this);
+    // Kill all tweens before destroying their targets to prevent
+    // tween callbacks firing on destroyed game objects
+    this.tweens.killAll();
     if (this.diedHandler) { gameEventBus.off('lemming:died', this.diedHandler); this.diedHandler = null; }
     if (this.touchControls) { this.touchControls.destroy(); this.touchControls = null; }
     if (this.hud) { this.hud.destroy(); this.hud = null; }

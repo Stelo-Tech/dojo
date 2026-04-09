@@ -39,6 +39,7 @@ export class TouchControls {
   private toolDirection: 1 | -1 = 1;
   private dirButton: Phaser.GameObjects.Graphics | null = null;
   private dirLabel: Phaser.GameObjects.Text | null = null;
+  private dirHitZone: Phaser.GameObjects.Rectangle | null = null;
 
   /** Preview ghost graphics */
   private preview: Phaser.GameObjects.Graphics;
@@ -87,13 +88,13 @@ export class TouchControls {
       fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(201).setScrollFactor(0);
 
-    const hit = this.scene.add.rectangle(btnX + btnW / 2, btnY + btnH / 2, btnW, btnH)
+    this.dirHitZone = this.scene.add.rectangle(btnX + btnW / 2, btnY + btnH / 2, btnW, btnH)
       .setInteractive({ useHandCursor: true })
       .setAlpha(0.001)
       .setDepth(202)
       .setScrollFactor(0);
 
-    hit.on('pointerdown', () => {
+    this.dirHitZone.on('pointerdown', () => {
       this.toolDirection = this.toolDirection === 1 ? -1 : 1;
       this.drawDirButton();
       if (this.dirLabel) {
@@ -285,6 +286,7 @@ export class TouchControls {
     this.scene.input.off('pointerdown', this.onPointerDownBound);
     this.scene.input.off('pointermove', this.onPointerMoveBound);
     this.preview.destroy();
+    if (this.dirHitZone) { this.dirHitZone.destroy(); this.dirHitZone = null; }
     if (this.dirButton) { this.dirButton.destroy(); this.dirButton = null; }
     if (this.dirLabel) { this.dirLabel.destroy(); this.dirLabel = null; }
     for (const flash of this.flashPool) {

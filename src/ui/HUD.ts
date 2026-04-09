@@ -19,6 +19,7 @@ interface ToolButton {
   iconGraphic: Phaser.GameObjects.Graphics;
   label: Phaser.GameObjects.Text;
   countText: Phaser.GameObjects.Text;
+  hitZone: Phaser.GameObjects.Rectangle;
   tool: ToolType;
 }
 
@@ -132,7 +133,7 @@ export class HUD {
       this.selectTool(tool);
     });
 
-    this.buttons.push({ container, background: bg, iconGraphic: iconG, label, countText, tool });
+    this.buttons.push({ container, background: bg, iconGraphic: iconG, label, countText, hitZone, tool });
   }
 
   private drawButtonBg(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, selected: boolean): void {
@@ -238,6 +239,7 @@ export class HUD {
   destroy(): void {
     gameEventBus.off('hud:update', this.hudUpdateHandler);
     for (const btn of this.buttons) {
+      btn.hitZone.destroy();
       btn.container.destroy();
     }
     this.buttons.length = 0;
