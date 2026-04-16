@@ -6,6 +6,7 @@ import { LevelSelectScene } from '@/scenes/LevelSelectScene';
 import { GameScene } from '@/scenes/GameScene';
 import { PauseScene } from '@/scenes/PauseScene';
 import { ResultScene } from '@/scenes/ResultScene';
+import { AchievementsScene } from '@/scenes/AchievementsScene';
 
 export const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -28,5 +29,5 @@ export const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [BootScene, MenuScene, LevelSelectScene, GameScene, PauseScene, ResultScene],
+  scene: [BootScene, MenuScene, LevelSelectScene, GameScene, PauseScene, ResultScene, AchievementsScene],
 };

@@ -6,6 +6,11 @@ import {
   STEP_CLIMB_MAX,
 } from '@/utils/Constants';
 
+/** Horizontal proximity (px) for blocker collision */
+const BLOCKER_RANGE_X = 8;
+/** Vertical proximity (px) for blocker collision */
+const BLOCKER_RANGE_Y = 16;
+
 export class PhysicsSystem {
   private readonly pool: LemmingPool;
   private readonly terrain: TerrainSystem;
@@ -17,6 +22,15 @@ export class PhysicsSystem {
 
   update(_dt: number): void {
     const active = this.pool.getActive();
+
+    // Collect blocker positions for collision checks (avoid O(n) per walker)
+    const blockerPositions: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i < active.length; i++) {
+      const lemming = active[i];
+      if (lemming && lemming.alive && lemming.getStateName() === 'blocker') {
+        blockerPositions.push({ x: lemming.x, y: lemming.y });
+      }
+    }
 
     for (let i = active.length - 1; i >= 0; i--) {
       const lemming = active[i];
@@ -32,10 +46,82 @@ export class PhysicsSystem {
 
       // Faller landing
       if (state === 'faller') {
+        // If the lemming has the floater trait, transition to floater instead
+        if (lemming.isFloater) {
+          lemming.changeState('floater');
+          continue;
+        }
         const onGround = this.checkGround(lemming.x, lemming.y);
         if (onGround) {
           lemming.y = this.snapToSurface(lemming.x, lemming.y);
           lemming.changeState('walker');
+        }
+        continue;
+      }
+
+      // Floater landing
+      if (state === 'floater') {
+        const onGround = this.checkGround(lemming.x, lemming.y);
+        if (onGround) {
+          lemming.y = this.snapToSurface(lemming.x, lemming.y);
+          lemming.changeState('walker');
+        }
+        continue;
+      }
+
+      // Climber physics: climbing up a wall
+      if (state === 'climber') {
+        // Check if there is still wall ahead at current position
+        const wallCheckX = lemming.x + lemming.direction * 6;
+        const wallStillPresent = this.terrain.isWall(wallCheckX, lemming.y - 4);
+
+        if (!wallStillPresent) {
+          // Reached top of wall -- move over the ledge and become a walker
+          lemming.x += lemming.direction * 6;
+          lemming.changeState('walker');
+          continue;
+        }
+
+        // Check if there is ground directly above (ceiling) -- cannot climb further
+        const ceilingCheck = this.terrain.isGround(lemming.x, lemming.y - 18);
+        if (ceilingCheck) {
+          // Stuck under ceiling -- reverse and become faller
+          lemming.direction = lemming.direction === 1 ? -1 : 1;
+          lemming.changeState('faller');
+          continue;
+        }
+        continue;
+      }
+
+      // Digger: check if lemming has dug through all terrain below
+      if (state === 'digger') {
+        const groundBelow = this.checkGround(lemming.x, lemming.y + 1);
+        if (!groundBelow) {
+          lemming.changeState('faller');
+        }
+        continue;
+      }
+
+      // Basher: check if lemming has bashed through the wall ahead
+      if (state === 'basher') {
+        const aheadX = lemming.x + lemming.direction * 8;
+        const wallAhead = this.terrain.isWall(aheadX, lemming.y - 4);
+        const groundBelow = this.checkGround(lemming.x, lemming.y + 1);
+        if (!groundBelow) {
+          lemming.changeState('faller');
+        } else if (!wallAhead) {
+          lemming.changeState('walker');
+        }
+        continue;
+      }
+
+      // Miner: check if lemming has mined through terrain
+      if (state === 'miner') {
+        const aheadX = lemming.x + lemming.direction * 6;
+        const groundAhead = this.terrain.isGround(aheadX, lemming.y);
+        const groundBelow = this.checkGround(lemming.x, lemming.y + 1);
+        if (!groundBelow && !groundAhead) {
+          lemming.changeState('faller');
         }
         continue;
       }
@@ -51,6 +137,24 @@ export class PhysicsSystem {
 
         // Always snap to surface
         lemming.y = this.snapToSurface(lemming.x, lemming.y);
+
+        // Check blocker collision: walkers reverse direction near blockers
+        let reversedByBlocker = false;
+        for (const bp of blockerPositions) {
+          const dx = Math.abs(lemming.x - bp.x);
+          const dy = Math.abs(lemming.y - bp.y);
+          if (dx < BLOCKER_RANGE_X && dy < BLOCKER_RANGE_Y && lemming.x !== bp.x) {
+            // Reverse only if walking toward the blocker
+            const walkingToward = (lemming.direction === 1 && lemming.x < bp.x) ||
+                                  (lemming.direction === -1 && lemming.x > bp.x);
+            if (walkingToward) {
+              lemming.direction = lemming.direction === 1 ? -1 : 1;
+              reversedByBlocker = true;
+              break;
+            }
+          }
+        }
+        if (reversedByBlocker) continue;
 
         // Step-climbing: detect low obstacles (1-STEP_CLIMB_MAX px) ahead
         const aheadX = lemming.x + lemming.direction * 6;
@@ -73,7 +177,7 @@ export class PhysicsSystem {
           }
         }
 
-        // Wall detection — only for tall walls (solid at all three check heights)
+        // Wall detection -- only for tall walls (solid at all three check heights)
         const wallCheckX = lemming.x + lemming.direction * 6;
         const wallAtLow = this.terrain.isWall(wallCheckX, lemming.y - 4);
         const wallAtMid = this.terrain.isWall(wallCheckX, lemming.y - 8);
@@ -81,6 +185,11 @@ export class PhysicsSystem {
         const wallAhead = wallAtLow && wallAtMid && wallAtHigh;
 
         if (wallAhead) {
+          // If the lemming has the climber trait, transition to climber state
+          if (lemming.isClimber) {
+            lemming.changeState('climber');
+            continue;
+          }
           lemming.direction = lemming.direction === 1 ? -1 : 1;
           continue;
         }

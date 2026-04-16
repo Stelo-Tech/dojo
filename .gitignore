@@ -4,3 +4,8 @@ dist
 .cache
 *.local
 coverage
+.claude/worktrees/
+
+# Capacitor generated native platform directories
+android/
+ios/

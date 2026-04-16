@@ -16,6 +16,7 @@ import { LemmingPool } from '@/entities/LemmingPool';
 import { SpawnSystem } from '@/systems/SpawnSystem';
 import { PhysicsSystem } from '@/systems/PhysicsSystem';
 import { TerrainSystem } from '@/systems/TerrainSystem';
+import { ParticleSystem } from '@/systems/ParticleSystem';
 import { HUD } from '@/ui/HUD';
 import { TouchControls } from '@/ui/TouchControls';
 import { LevelData, DifficultyConfig } from '@/levels/LevelData';
@@ -28,6 +29,7 @@ export class GameScene extends Phaser.Scene {
   private spawnSystem: SpawnSystem | null = null;
   private physicsSystem: PhysicsSystem | null = null;
   private terrainSystem: TerrainSystem | null = null;
+  private particleSystem: ParticleSystem | null = null;
   private hud: HUD | null = null;
   private touchControls: TouchControls | null = null;
   private exitZone: Phaser.GameObjects.Graphics | null = null;
@@ -36,15 +38,31 @@ export class GameScene extends Phaser.Scene {
   private savedCount = 0;
   private deadCount = 0;
   private diedHandler: ((data: { id: number; cause: string }) => void) | null = null;
+  private diggerHandler: ((data: { id: number; x: number; y: number }) => void) | null = null;
+  private basherHandler: ((data: { id: number; x: number; y: number; direction: 1 | -1 }) => void) | null = null;
+  private minerHandler: ((data: { id: number; x: number; y: number; direction: 1 | -1 }) => void) | null = null;
+  private builderHandler: ((data: { id: number; x: number; y: number; direction: 1 | -1 }) => void) | null = null;
+  private bomberHandler: ((data: { id: number; x: number; y: number }) => void) | null = null;
   private elapsedTime = 0;
   private levelData: LevelData | null = null;
   private levelEnded = false;
   private endDelay = 0;
 
   private bgGraphics: Phaser.GameObjects.Graphics | null = null;
+  private mountainLayer: Phaser.GameObjects.Graphics | null = null;
+  private cloudGraphics: Phaser.GameObjects.Graphics | null = null;
   private readonly starGraphics: Phaser.GameObjects.Arc[] = [];
   private spawnPortal: Phaser.GameObjects.Graphics | null = null;
   private spawnLabel: Phaser.GameObjects.Text | null = null;
+
+  // Screen effects
+  private vignette: Phaser.GameObjects.Graphics | null = null;
+  private levelFlash: Phaser.GameObjects.Rectangle | null = null;
+  private shakeActive = false;
+  private shakeElapsed = 0;
+
+  // Parallax clouds
+  private readonly clouds: Array<{ x: number; y: number; wMult: number; hMult: number; alpha: number; speed: number }> = [];
 
   constructor() {
     super({ key: 'GameScene' });
@@ -56,6 +74,9 @@ export class GameScene extends Phaser.Scene {
     this.elapsedTime = 0;
     this.levelEnded = false;
     this.endDelay = 0;
+    this.shakeActive = false;
+    this.shakeElapsed = 0;
+    this.clouds.length = 0;
 
     // Get or generate level data
     if (data?.levelData) {
@@ -65,6 +86,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.createBackground();
+    this.createParallaxLayers();
     this.createStars();
 
     // Build terrain from level data
@@ -84,14 +106,92 @@ export class GameScene extends Phaser.Scene {
       spawnInterval: this.levelData.spawnInterval,
     });
     this.physicsSystem = new PhysicsSystem(this.lemmingPool, this.terrainSystem);
+    this.particleSystem = new ParticleSystem(this);
 
     this.hud = new HUD(this, this.levelData.toolBudget);
-    this.touchControls = new TouchControls(this, this.hud, this.terrainSystem, this.levelData.exit);
+    this.touchControls = new TouchControls(this, this.hud, this.terrainSystem, this.lemmingPool, this.levelData.exit);
 
-    this.diedHandler = (_data: { id: number; cause: string }) => {
+    this.diedHandler = (data: { id: number; cause: string }) => {
       this.deadCount++;
+      // Death poof particles — find lemming position
+      const active = this.lemmingPool?.getActive() ?? [];
+      const lem = active.find(l => l.id === data.id);
+      if (lem && this.particleSystem) {
+        this.particleSystem.emitDeathPoof(lem.x, lem.y);
+      }
     };
     gameEventBus.on('lemming:died', this.diedHandler);
+
+    // Skill event listeners: connect lemming skill actions to terrain modifications
+    this.diggerHandler = (data: { id: number; x: number; y: number }) => {
+      if (this.terrainSystem) {
+        this.terrainSystem.eraseRect(data.x - 6, data.y, 12, 4);
+      }
+      if (this.particleSystem) {
+        this.particleSystem.emitDigParticles(data.x, data.y);
+      }
+    };
+    gameEventBus.on('digger:dig', this.diggerHandler);
+
+    this.basherHandler = (data: { id: number; x: number; y: number; direction: 1 | -1 }) => {
+      if (this.terrainSystem) {
+        const bx = data.direction === 1 ? data.x : data.x - 12;
+        this.terrainSystem.eraseRect(bx, data.y - 8, 12, 16);
+      }
+    };
+    gameEventBus.on('basher:dig', this.basherHandler);
+
+    this.minerHandler = (data: { id: number; x: number; y: number; direction: 1 | -1 }) => {
+      if (this.terrainSystem) {
+        const mx = data.direction === 1 ? data.x : data.x - 10;
+        this.terrainSystem.eraseRect(mx, data.y - 4, 10, 8);
+      }
+    };
+    gameEventBus.on('miner:dig', this.minerHandler);
+
+    this.builderHandler = (data: { id: number; x: number; y: number; direction: 1 | -1 }) => {
+      if (this.terrainSystem) {
+        const bx = data.direction === 1 ? data.x : data.x - 6;
+        this.terrainSystem.buildStep(bx, data.y, 6, 2);
+      }
+      if (this.particleSystem) {
+        this.particleSystem.emitBuildParticles(data.x, data.y);
+      }
+    };
+    gameEventBus.on('builder:build', this.builderHandler);
+
+    this.bomberHandler = (data: { id: number; x: number; y: number }) => {
+      if (this.terrainSystem) {
+        this.terrainSystem.eraseRect(data.x - 15, data.y - 15, 30, 30);
+      }
+      if (this.particleSystem) {
+        this.particleSystem.emitExplosion(data.x, data.y);
+      }
+      this.shakeActive = true;
+      this.shakeElapsed = 0;
+    };
+    gameEventBus.on('bomber:explode', this.bomberHandler);
+
+    // Saved celebration particles (hooked directly, no separate savedHandler field needed)
+    gameEventBus.on('lemming:saved', (data: { id: number }) => {
+      const active = this.lemmingPool?.getActive() ?? [];
+      const lem = active.find(l => l.id === data.id);
+      if (lem && this.particleSystem) {
+        this.particleSystem.emitSaveEffect(lem.x, lem.y);
+      }
+    });
+
+    // Vignette overlay for atmosphere
+    this.vignette = this.add.graphics().setDepth(300).setAlpha(0.15);
+    this.vignette.fillStyle(0x000000, 1);
+    this.vignette.fillRect(0, 0, GAME_WIDTH, 8);
+    this.vignette.fillRect(0, GAME_HEIGHT - 8, GAME_WIDTH, 8);
+    this.vignette.fillRect(0, 0, 8, GAME_HEIGHT);
+    this.vignette.fillRect(GAME_WIDTH - 8, 0, 8, GAME_HEIGHT);
+
+    // Level flash rect (hidden, used on level complete)
+    this.levelFlash = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0xffffff, 0);
+    this.levelFlash.setDepth(400);
 
     // Register cleanup on Phaser scene lifecycle events
     this.events.once('shutdown', this.cleanUp, this);
@@ -132,6 +232,35 @@ export class GameScene extends Phaser.Scene {
     if (this.physicsSystem) {
       this.physicsSystem.update(dt);
     }
+    if (this.particleSystem) {
+      this.particleSystem.update(dt);
+    }
+
+    // Animate parallax clouds
+    if (this.cloudGraphics && this.clouds.length > 0) {
+      this.cloudGraphics.clear();
+      for (const c of this.clouds) {
+        c.x += c.speed * dt;
+        if (c.x > GAME_WIDTH + 80) c.x = -80;
+        this.cloudGraphics.fillStyle(0xffffff, c.alpha);
+        this.cloudGraphics.fillEllipse(c.x, c.y, c.wMult, c.hMult);
+      }
+    }
+
+    // Screen shake
+    if (this.shakeActive) {
+      this.shakeElapsed += dt;
+      if (this.shakeElapsed > 0.15) {
+        this.shakeActive = false;
+        this.cameras.main.setScroll(0, 0);
+      } else {
+        const intensity = 3 * (1 - this.shakeElapsed / 0.15);
+        this.cameras.main.setScroll(
+          (Math.random() - 0.5) * intensity * 2,
+          (Math.random() - 0.5) * intensity * 2,
+        );
+      }
+    }
 
     if (this.lemmingPool && this.levelData) {
       const active = this.lemmingPool.getActive();
@@ -166,6 +295,30 @@ export class GameScene extends Phaser.Scene {
           if (this.endDelay >= 1.0) {
             this.levelEnded = true;
             const won = this.savedCount >= this.levelData.requiredSaves;
+            // Build skills used/available maps from tool budget
+            const skillsAvailable: Record<string, number> = {};
+            const toolBudget = this.levelData.toolBudget;
+            const toolKeys = Object.keys(toolBudget);
+            for (let ti = 0; ti < toolKeys.length; ti++) {
+              const tk = toolKeys[ti];
+              if (tk) {
+                skillsAvailable[tk] = toolBudget[tk as keyof typeof toolBudget] ?? 0;
+              }
+            }
+            // Gather used tools from HUD if available
+            const skillsUsed: Record<string, number> = {};
+            if (this.hud) {
+              const remaining = this.hud.getToolCounts();
+              const rKeys = Object.keys(remaining);
+              for (let ri = 0; ri < rKeys.length; ri++) {
+                const rk = rKeys[ri];
+                if (rk) {
+                  const avail = skillsAvailable[rk] ?? 0;
+                  const rem = remaining[rk as keyof typeof remaining] ?? 0;
+                  skillsUsed[rk] = Math.max(0, avail - rem);
+                }
+              }
+            }
             this.scene.start('ResultScene', {
               saved: this.savedCount,
               dead: this.deadCount,
@@ -175,10 +328,50 @@ export class GameScene extends Phaser.Scene {
               tier: this.levelData.tier,
               won,
               levelData: this.levelData,
+              timeElapsed: this.elapsedTime,
+              skillsUsed,
+              skillsAvailable,
             });
           }
         }
       }
+    }
+  }
+
+  private createParallaxLayers(): void {
+    // Mountain silhouette (far layer)
+    const mtn = this.add.graphics().setDepth(1).setAlpha(0.3);
+    this.mountainLayer = mtn;
+    const skyBottom = TERRAIN_Y - 40;
+    mtn.fillStyle(0x1a2040, 1);
+    let seed = 7777;
+    const nextRand = (): number => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    let mx = 0;
+    mtn.beginPath();
+    mtn.moveTo(0, skyBottom);
+    while (mx < GAME_WIDTH) {
+      const peakH = 30 + nextRand() * 60;
+      const segW = 40 + nextRand() * 80;
+      mtn.lineTo(mx + segW / 2, skyBottom - peakH);
+      mtn.lineTo(mx + segW, skyBottom);
+      mx += segW;
+    }
+    mtn.lineTo(GAME_WIDTH, skyBottom);
+    mtn.closePath();
+    mtn.fillPath();
+
+    // Clouds (mid layer)
+    const cg = this.add.graphics().setDepth(2).setAlpha(0.2);
+    this.cloudGraphics = cg;
+    for (let i = 0; i < 5; i++) {
+      const cx = nextRand() * GAME_WIDTH;
+      const cy = 30 + nextRand() * (skyBottom * 0.4);
+      const w = 40 + nextRand() * 60;
+      const h = 12 + nextRand() * 15;
+      cg.fillStyle(0xffffff, 0.3 + nextRand() * 0.3);
+      cg.fillEllipse(cx, cy, w, h);
+      cg.fillEllipse(cx + w * 0.3, cy - h * 0.2, w * 0.6, h * 0.7);
+      this.clouds.push({ x: cx, y: cy, wMult: w, hMult: h, alpha: 0.3, speed: 3 + nextRand() * 5 });
     }
   }
 
@@ -378,6 +571,11 @@ export class GameScene extends Phaser.Scene {
     // tween callbacks firing on destroyed game objects
     this.tweens.killAll();
     if (this.diedHandler) { gameEventBus.off('lemming:died', this.diedHandler); this.diedHandler = null; }
+    if (this.diggerHandler) { gameEventBus.off('digger:dig', this.diggerHandler); this.diggerHandler = null; }
+    if (this.basherHandler) { gameEventBus.off('basher:dig', this.basherHandler); this.basherHandler = null; }
+    if (this.minerHandler) { gameEventBus.off('miner:dig', this.minerHandler); this.minerHandler = null; }
+    if (this.builderHandler) { gameEventBus.off('builder:build', this.builderHandler); this.builderHandler = null; }
+    if (this.bomberHandler) { gameEventBus.off('bomber:explode', this.bomberHandler); this.bomberHandler = null; }
     if (this.touchControls) { this.touchControls.destroy(); this.touchControls = null; }
     if (this.hud) { this.hud.destroy(); this.hud = null; }
     if (this.spawnSystem) { this.spawnSystem.destroy(); this.spawnSystem = null; }
@@ -390,6 +588,10 @@ export class GameScene extends Phaser.Scene {
     if (this.spawnPortal) { this.spawnPortal.destroy(); this.spawnPortal = null; }
     if (this.spawnLabel) { this.spawnLabel.destroy(); this.spawnLabel = null; }
     if (this.bgGraphics) { this.bgGraphics.destroy(); this.bgGraphics = null; }
+    if (this.mountainLayer) { this.mountainLayer.destroy(); this.mountainLayer = null; }
+    if (this.cloudGraphics) { this.cloudGraphics.destroy(); this.cloudGraphics = null; }
+    if (this.vignette) { this.vignette.destroy(); this.vignette = null; }
+    if (this.levelFlash) { this.levelFlash.destroy(); this.levelFlash = null; }
     for (const star of this.starGraphics) { star.destroy(); }
     this.starGraphics.length = 0;
   }
